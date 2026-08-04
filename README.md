@@ -193,6 +193,9 @@ Windows 的 CMD / PowerShell 不认上面的反斜杠续行和单引号，
 
 没有前端构建步骤，改完模板或 CSS 刷新页面就生效。
 
+> 前端资源（含 HTMX）均已本地化到 `app/static/`，页面不依赖任何外部 CDN，
+> 内网 / 离线环境下也能完整加载。
+
 ## 项目结构
 
 ```
@@ -242,7 +245,7 @@ workbench/
 
 - `/cases`、`/files`、`/review`、`/settings` 四个页面还是占位符
 - `app/static/charts.js` 目前没有任何模板引用它（图表走的是内联 SVG）
-- `base.html` 加载了 HTMX，但代码里还没有用到任何 `hx-*` 属性
+- `base.html` 加载了本地化的 HTMX（`app/static/htmx.min.js`，不依赖外部 CDN），但代码里还没有用到任何 `hx-*` 属性
 - `WORKBENCH_DEBUG` 和 `WORKBENCH_PAGE_SIZE` 两个配置项已声明但尚未接线
 
 ## 排查问题

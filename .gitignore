@@ -6,6 +6,7 @@ data/*
 *.db-journal
 *.db-wal
 *.db-shm
+#docs/
 
 # 本地配置(含各自的数据目录路径)
 .env
@@ -17,6 +18,11 @@ __pycache__/
 *.py[cod]
 *.egg-info/
 .pytest_cache/
+
+# ---- SLURM 相关 ----
+logs/
+run_slurm.sh
+SLURM_DEPLOY.md
 
 # ---- 编辑器 / 系统 ----
 .DS_Store
