@@ -9,22 +9,31 @@
 
 ## 快速开始
 
-### Mac / Linux
+### 第一步：把代码弄到本地
+
+**方式 A — 用 git（推荐，以后能一条命令更新）**
 
 ```bash
-git clone <仓库地址> workbench
+git clone https://github.com/treeChan/csworkbench.git workbench
 cd workbench
+```
+
+**方式 B — 直接下载（不用装 git）**
+
+点本页面右上方绿色的 **`Code`** 按钮 → **`Download ZIP`** → 解压到任意文件夹。
+
+> 两种方式都能用。区别是：用 git 克隆的，以后作者更新了你跑一句 `git pull` 就同步；
+> 下载 ZIP 的，想更新得重新下载一次（下载前记得先备份好自己的数据文件）。
+
+### 第二步：启动
+
+**Mac / Linux** —— 在项目文件夹里打开终端：
+
+```bash
 ./run.sh
 ```
 
-### Windows
-
-```
-git clone <仓库地址> workbench
-cd workbench
-```
-
-然后**双击 `run.bat`**（或在命令行里执行 `run.bat`）。
+**Windows** —— **双击 `run.bat`** 就行。
 
 ---
 
@@ -42,6 +51,9 @@ cd workbench
 > **需要 Python 3.10 或更高版本。**
 > 没装或者版本太旧的话，启动脚本会告诉你去哪儿下载，不会报一堆看不懂的错。
 > 下载地址：https://www.python.org/downloads/ （Windows 安装时记得勾选 “Add Python to PATH”）
+
+> **这是个完全跑在你自己电脑上的工具。** 不需要注册账号，装好之后不联网也能用，
+> 你记录的任何内容都不会发送到任何服务器 —— 包括作者那里。
 
 ---
 
