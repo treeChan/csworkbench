@@ -1,0 +1,151 @@
+{% extends "base.html" %}
+{% block title %}上传结果 · {{ experiment.name }}{% endblock %}
+
+{% block content %}
+<div class="breadcrumb">
+    <a href="/projects">研究项目</a>
+    <span class="sep">/</span>
+    <a href="/projects/{{ project.id }}">{{ project.name }}</a>
+    {% if goal %}<span class="sep">/</span><a href="/goals/{{ goal.id }}/edit">🎯 {{ goal.name }}</a>{% endif %}
+    <span class="sep">/</span>
+    <a href="/experiments/{{ experiment.id }}">{{ experiment.name }}</a>
+    <span class="sep">/</span> 上传结果
+</div>
+
+<div class="today-header">
+    <h1>📤 上传结果 · {{ experiment.name }}</h1>
+    <a href="/experiments/{{ experiment.id }}" class="btn btn-outline"
+       style="margin-left: auto;">← 返回实验</a>
+</div>
+
+<!-- 提示卡：说明这里只能改结果，不改设计 -->
+<div class="alert" style="background: var(--c-primary-bg); color: var(--c-primary); border-left: 3px solid var(--c-primary);">
+    这里只填<strong>实验结果</strong>。实验的假设、设计、参数请到
+    <a href="/experiments/{{ experiment.id }}/edit" style="color: var(--c-primary); text-decoration: underline;">编辑实验</a>
+    页面修改。
+</div>
+
+<!-- ============= 结果小结 ============= -->
+<div class="card">
+    <h3 class="card-title">💡 结果小结</h3>
+    <form method="post" action="/experiments/{{ experiment.id }}/results">
+        <textarea name="result_summary" rows="6"
+                  placeholder="最终结论、关键数字、意外发现…"
+                  style="width: 100%; padding: 8px 10px; border: 1px solid var(--c-border); border-radius: var(--radius-md); font-size: 13px;">{{ experiment.result_summary or '' }}</textarea>
+        <div style="text-align: right; margin-top: 8px;">
+            <button type="submit" class="btn btn-primary">💾 保存小结</button>
+        </div>
+    </form>
+</div>
+
+<!-- ============= 指标 ============= -->
+<div class="card">
+    <div class="card-header">
+        <h3>📈 训练曲线 / 指标 <small style="color: var(--c-text-soft); font-weight: normal;">({{ metrics|length }} 项)</small></h3>
+    </div>
+
+    <form method="post" action="/experiments/{{ experiment.id }}/metrics"
+          style="display: flex; gap: 8px; align-items: center; margin-bottom: 14px;">
+        <input type="text" name="key" placeholder="loss / acc / lr …" required
+               style="padding: 6px 10px; border: 1px solid var(--c-border); border-radius: var(--radius-md); font-size: 12.5px; width: 160px;">
+        <input type="number" step="any" name="value" placeholder="数值" required
+               style="padding: 6px 10px; border: 1px solid var(--c-border); border-radius: var(--radius-md); font-size: 12.5px; width: 120px;">
+        <input type="number" name="step" placeholder="step (可选)"
+               style="padding: 6px 10px; border: 1px solid var(--c-border); border-radius: var(--radius-md); font-size: 12.5px; width: 120px;">
+        <button type="submit" class="btn btn-primary" style="padding: 6px 14px; font-size: 12.5px;">+ 添加</button>
+    </form>
+
+    {% if metrics_grouped %}
+        {% for key, points in metrics_grouped.items() %}
+        <div style="margin-bottom: 14px;">
+            <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 6px;">
+                <strong style="color: var(--c-primary); font-size: 13px;">{{ key }}</strong>
+                <span style="font-size: 11.5px; color: var(--c-text-soft);">({{ points|length }} 个点)</span>
+            </div>
+            {% set ns = namespace(max_val=0.0, min_val=0.0) %}
+            {% for p in points %}
+                {% if loop.first %}
+                    {% set ns.max_val = p.value %}
+                    {% set ns.min_val = p.value %}
+                {% else %}
+                    {% if p.value > ns.max_val %}{% set ns.max_val = p.value %}{% endif %}
+                    {% if p.value < ns.min_val %}{% set ns.min_val = p.value %}{% endif %}
+                {% endif %}
+            {% endfor %}
+            {% set span = (ns.max_val - ns.min_val) if (ns.max_val - ns.min_val) > 0 else 1.0 %}
+            {% set n_pts = points|length %}
+            <svg width="100%" height="120" viewBox="0 0 800 120"
+                 preserveAspectRatio="none"
+                 style="background: var(--c-bg-soft); border-radius: var(--radius-md); border: 1px solid var(--c-border);">
+                <polyline fill="none" stroke="#7C3AED" stroke-width="1.8"
+                    points="{% for p in points %}{% set xi = (loop.index0 * 800.0 / (n_pts + 1)) %}{% set yi = (110 - ((p.value - ns.min_val) / span * 100 + 5)) %}{{ '%.1f,%.1f' | format(xi, yi) }} {% endfor %}"/>
+                {% for p in points %}
+                    {% set xi = (loop.index0 * 800.0 / (n_pts + 1)) %}
+                    {% set yi = (110 - ((p.value - ns.min_val) / span * 100 + 5)) %}
+                    <circle cx="{{ '%.1f' | format(xi) }}" cy="{{ '%.1f' | format(yi) }}" r="2.5" fill="#7C3AED"/>
+                {% endfor %}
+            </svg>
+            <details style="margin-top: 6px;">
+                <summary style="font-size: 12px; color: var(--c-text-soft); cursor: pointer;">查看明细 ({{ points|length }} 条)</summary>
+                <table class="tbl" style="margin-top: 8px;">
+                    <thead>
+                        <tr><th>step</th><th>value</th><th></th></tr>
+                    </thead>
+                    <tbody>
+                        {% for p in points|reverse %}
+                        <tr>
+                            <td>{{ p.step if p.step is not none else '—' }}</td>
+                            <td style="font-family: ui-monospace, monospace;">{{ '%.6g' | format(p.value) }}</td>
+                            <td>
+                                <form method="post" action="/metrics/{{ p.id }}/delete" style="display:inline;">
+                                    <button type="submit" class="btn btn-outline"
+                                            style="padding: 1px 6px; font-size: 11px;">×</button>
+                                </form>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </details>
+        </div>
+        {% endfor %}
+    {% else %}
+        <p style="text-align: center; color: var(--c-text-soft); padding: 16px;">
+            还没指标 — 在上方表单逐条添加。
+        </p>
+    {% endif %}
+</div>
+
+<!-- ============= 观察笔记 ============= -->
+<div class="card">
+    <div class="card-header">
+        <h3>📒 观察笔记 <small style="color: var(--c-text-soft); font-weight: normal;">({{ notes|length }} 条)</small></h3>
+    </div>
+
+    <form method="post" action="/experiments/{{ experiment.id }}/notes"
+          style="margin-bottom: 14px;">
+        <textarea name="content" rows="3" placeholder="训练过程观察、灵感、问题…"
+                  style="width: 100%; padding: 8px 10px; border: 1px solid var(--c-border); border-radius: var(--radius-md); font-size: 13px;"></textarea>
+        <div style="text-align: right; margin-top: 6px;">
+            <button type="submit" class="btn btn-primary" style="padding: 6px 14px; font-size: 12.5px;">+ 记录</button>
+        </div>
+    </form>
+
+    {% if notes %}
+        {% for n in notes %}
+        <div style="border-left: 3px solid var(--c-primary-light); padding: 8px 12px; margin-bottom: 10px; background: var(--c-bg-soft); border-radius: 0 var(--radius-md) var(--radius-md) 0;">
+            <div class="md">{{ n.content | markdown | safe }}</div>
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 6px;">
+                <small style="color: var(--c-text-faint); font-size: 11.5px;">{{ n.created_at | fmt_dt }}</small>
+                <form method="post" action="/notes/{{ n.id }}/delete" style="display:inline;">
+                    <button type="submit" class="btn btn-outline" style="padding: 1px 6px; font-size: 11px;">删除</button>
+                </form>
+            </div>
+        </div>
+        {% endfor %}
+    {% else %}
+        <p style="text-align: center; color: var(--c-text-soft); padding: 16px;">还没有笔记</p>
+    {% endif %}
+</div>
+
+{% endblock %}

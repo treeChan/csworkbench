@@ -1,0 +1,55 @@
+{% extends "base.html" %}
+{% block title %}研究项目 · {{ app_name }}{% endblock %}
+
+{% block content %}
+<div class="today-header">
+    <h1>研究项目</h1>
+    <span class="today-date">共 {{ projects|length }} 个项目</span>
+    <a href="/projects/new" class="btn btn-primary" style="margin-left: auto;">+ 新建项目</a>
+</div>
+
+{% if not projects %}
+<div class="card" style="text-align: center; padding: 48px;">
+    <p style="color: var(--c-text-soft); font-size: 14px;">
+        还没有项目。<a href="/projects/new" style="color: var(--c-primary); font-weight: 600;">创建第一个项目 →</a>
+    </p>
+</div>
+{% else %}
+<div class="project-list">
+    {% for p in projects %}
+    <div class="project-row">
+        <a href="/projects/{{ p.id }}" class="project-card">
+            <div class="project-icon">📁</div>
+            <div class="project-meta">
+                <div class="project-name">{{ p.name }}</div>
+                <div class="project-desc">
+                    {% if p.description %}{{ p.description }}{% else %}—{% endif %}
+                </div>
+                <div style="margin-top: 4px;">
+                    {% for tag in p.tags.split(',') if tag.strip() %}
+                    <span class="badge" style="margin-right: 4px; font-size: 10px; background: var(--c-primary-bg); color: var(--c-primary); border: 1px solid var(--c-primary-light);">{{ tag.strip() }}</span>
+                    {% endfor %}
+                </div>
+            </div>
+            <div class="project-stats">
+                <span>📍 <strong>{{ pipeline_stages[p.current_stage - 1][1] }}</strong></span>
+                <span>·</span>
+                <span>🧪 {{ experiment_counts[p.id] }} 个实验</span>
+                <span>·</span>
+                <span style="color: var(--c-text-faint);">更新于 {{ p.updated_at | fmt_dt }}</span>
+            </div>
+        </a>
+        <form method="post" action="/projects/{{ p.id }}/delete"
+              onsubmit="return confirm('确认删除项目「{{ p.name }}」?\\n\\n该项目下的所有大目标 / 实验 / 指标 / 笔记 / 决策都会被删除!')"
+              style="display: flex; align-items: center; padding: 0 12px;">
+            <button type="submit" class="btn btn-outline"
+                    title="删除项目"
+                    style="padding: 6px 10px; font-size: 13px; color: var(--c-danger); border-color: var(--c-danger);">
+                🗑
+            </button>
+        </form>
+    </div>
+    {% endfor %}
+</div>
+{% endif %}
+{% endblock %}

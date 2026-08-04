@@ -1,0 +1,52 @@
+{% extends "base.html" %}
+{% block title %}{{ action }}项目 · {{ app_name }}{% endblock %}
+
+{% block content %}
+<div class="breadcrumb">
+    <a href="/projects">研究项目</a> <span class="sep">/</span> {{ action }}项目
+</div>
+
+<div class="today-header">
+    <h1>{{ action }}项目</h1>
+</div>
+
+<div class="card" style="max-width: 720px;">
+    <form method="post" action="/projects">
+        <div class="form-row">
+            <label>项目名 *</label>
+            <input type="text" name="name" required minlength="1" maxlength="100"
+                   value="{{ project.name if project else '' }}">
+        </div>
+
+        <div class="form-row">
+            <label>简介</label>
+            <textarea name="description" rows="3">{{ project.description if project else '' }}</textarea>
+        </div>
+
+        <div class="form-row">
+            <label>标签（逗号分隔）</label>
+            <input type="text" name="tags"
+                   placeholder="ml, acoustics, research"
+                   value="{{ project.tags if project else '' }}">
+        </div>
+
+        <div class="form-row">
+            <label>当前流水线阶段</label>
+            <select name="current_stage">
+                {% for num, name in pipeline_stages %}
+                <option value="{{ num }}"
+                        {% if project and project.current_stage == num %}selected{% endif %}>
+                    {{ num }}. {{ name }}
+                </option>
+                {% endfor %}
+            </select>
+        </div>
+
+        <div class="form-actions">
+            <button type="submit" class="btn btn-primary">{{ action }}</button>
+            <a href="{{ '/projects/' + project.id|string if project else '/projects' }}"
+               class="btn btn-outline">取消</a>
+        </div>
+    </form>
+</div>
+{% endblock %}

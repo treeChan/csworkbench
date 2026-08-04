@@ -1,0 +1,17 @@
+{% extends "base.html" %}
+{% block title %}{{ page_title }} · {{ app_name }}{% endblock %}
+
+{% block content %}
+<div class="today-header">
+    <h1>{{ page_icon }} {{ page_title }}</h1>
+</div>
+
+<div class="card" style="text-align: center; padding: 64px 32px;">
+    <div style="font-size: 56px; margin-bottom: 12px;">{{ page_icon }}</div>
+    <h2 style="margin: 0 0 8px; color: var(--c-text); font-size: 18px;">{{ page_title }}</h2>
+    <p style="color: var(--c-text-soft); font-size: 13.5px; max-width: 480px; margin: 0 auto 24px;">
+        {{ page_desc }}
+    </p>
+    <a href="/" class="btn btn-outline">← 回到今日</a>
+</div>
+{% endblock %}

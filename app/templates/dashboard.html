@@ -1,0 +1,118 @@
+{% extends "base.html" %}
+{% block title %}项目战情室 · {{ app_name }}{% endblock %}
+
+{% block content %}
+
+<!-- ============= 页面标题 ============= -->
+<div class="today-header">
+    <div class="warroom-title">
+        <h1>🛰️ 项目战情室</h1>
+        <span class="today-date">{{ now().strftime('%Y年%m月%d日') }} · {{ ['星期一','星期二','星期三','星期四','星期五','星期六','星期日'][now().weekday()] }}</span>
+    </div>
+    <a href="/projects/new" class="btn btn-primary">+ 新建项目</a>
+</div>
+
+<!-- ============= 全局统计条 ============= -->
+<div class="stat-bar">
+    <div class="stat-cell">
+        <div class="stat-num">{{ total_projects }}</div>
+        <div class="stat-label">个项目</div>
+    </div>
+    <div class="stat-cell">
+        <div class="stat-num">{{ total_experiments }}</div>
+        <div class="stat-label">个实验</div>
+    </div>
+    <div class="stat-cell stat-ok">
+        <div class="stat-num">{{ total_results }}</div>
+        <div class="stat-label">已上传结果</div>
+    </div>
+    <div class="stat-cell stat-warn">
+        <div class="stat-num">{{ total_pending }}</div>
+        <div class="stat-label">待传结果</div>
+    </div>
+    <div class="stat-cell">
+        <div class="stat-num">{{ total_open_decisions }}</div>
+        <div class="stat-label">个未关闭决策</div>
+    </div>
+</div>
+
+<!-- ============= 项目网格 ============= -->
+{% if project_cards %}
+<div class="project-grid">
+    {% for card in project_cards %}
+    {% set p = card.project %}
+    {% set s = card.stats %}
+    {% set progress = (100 * s.done_count // s.exp_count) if s.exp_count > 0 else 0 %}
+    <a href="/projects/{{ p.id }}" class="warroom-card">
+        <div class="warroom-card-header">
+            <h3 class="warroom-card-title">{{ p.name }}</h3>
+            <span class="stage-pill">阶段 · {{ card.stage_name }}</span>
+        </div>
+
+        {% if p.description %}
+        <p class="warroom-card-desc">{{ p.description[:80] }}{% if p.description|length > 80 %}…{% endif %}</p>
+        {% endif %}
+
+        <!-- 进度条 -->
+        <div class="progress-section">
+            <div class="progress-bar">
+                <div class="progress-fill {% if progress >= 100 %}is-done{% endif %}"
+                     style="width: {{ progress }}%;"></div>
+            </div>
+            <div class="progress-text">
+                <span><strong>{{ s.done_count }}</strong> / {{ s.exp_count }} 实验已出结果</span>
+                <span class="progress-pct">{{ progress }}%</span>
+            </div>
+        </div>
+
+        <!-- 行内统计 -->
+        <div class="card-stats">
+            <div class="card-stat">
+                <span class="card-stat-icon">🎯</span>
+                <span class="card-stat-val">{{ s.goal_count }}</span>
+                <span class="card-stat-label">大目标</span>
+            </div>
+            <div class="card-stat">
+                <span class="card-stat-icon">🧪</span>
+                <span class="card-stat-val">{{ s.exp_count }}</span>
+                <span class="card-stat-label">实验</span>
+            </div>
+            <div class="card-stat {% if s.pending_count > 0 %}stat-warn{% endif %}">
+                <span class="card-stat-icon">⏰</span>
+                <span class="card-stat-val">{{ s.pending_count }}</span>
+                <span class="card-stat-label">待传结果</span>
+            </div>
+        </div>
+
+        <!-- 最近截止提示 -->
+        {% if s.earliest_due %}
+        <div class="warroom-card-foot">
+            📅 最近截止 <strong>{{ s.earliest_due.strftime('%m-%d') }}</strong>
+            <span class="foot-muted"> · {{ s.next_due_exp_name }}</span>
+        </div>
+        {% elif s.pending_count > 0 %}
+        <div class="warroom-card-foot foot-muted">
+            ⏰ 有待传结果的实验未设截止
+        </div>
+        {% elif s.exp_count == 0 %}
+        <div class="warroom-card-foot foot-muted">
+            🌱 尚未创建实验
+        </div>
+        {% else %}
+        <div class="warroom-card-foot foot-ok">
+            ✅ 所有实验均已出结果
+        </div>
+        {% endif %}
+    </a>
+    {% endfor %}
+</div>
+{% else %}
+<div class="empty-state">
+    <div class="empty-icon">🛰️</div>
+    <h3>还没有任何项目</h3>
+    <p>从新建一个研究项目开始 — 拆解大目标、跟踪实验、记录结果。</p>
+    <a href="/projects/new" class="btn btn-primary">+ 新建项目</a>
+</div>
+{% endif %}
+
+{% endblock %}

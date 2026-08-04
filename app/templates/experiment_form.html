@@ -1,0 +1,116 @@
+{% extends "base.html" %}
+{% block title %}{{ action }}实验 · {{ project.name }}{% endblock %}
+
+{% block content %}
+<div class="breadcrumb">
+    <a href="/projects">研究项目</a>
+    <span class="sep">/</span>
+    <a href="/projects/{{ project.id }}">{{ project.name }}</a>
+    <span class="sep">/</span> {{ action }}实验
+</div>
+
+<div class="today-header">
+    <h1>🧪 {{ action }}实验</h1>
+</div>
+
+<div class="card" style="max-width: 880px;">
+
+    {% if action == 'Create' and (not goals or goals|length == 0) %}
+    <div class="alert alert-error" style="margin-bottom: 16px;">
+        <strong>请先创建大目标。</strong> 实验必须挂在大目标下。
+        <a href="/projects/{{ project.id }}/goals/new" style="color: var(--c-primary); margin-left: 6px;">
+            + 新建大目标
+        </a>
+    </div>
+    {% endif %}
+
+    <form method="post" action="{% if experiment %}/experiments/{{ experiment.id }}{% else %}/projects/{{ project.id }}/experiments{% endif %}">
+
+        <!-- ============= 所属大目标 ============= -->
+        <div class="form-row">
+            <label>所属大目标 *</label>
+            {% if goals %}
+            <select name="goal_id" required>
+                {% for g in goals %}
+                <option value="{{ g.id }}"
+                        {% if experiment and experiment.goal_id == g.id %}selected{% endif %}>
+                    🎯 {{ g.name }}
+                </option>
+                {% endfor %}
+            </select>
+            {% else %}
+            <input type="text" disabled value="（请先创建大目标）">
+            <input type="hidden" name="goal_id" value="">
+            {% endif %}
+        </div>
+
+        <div class="form-row">
+            <label>实验名 *</label>
+            <input type="text" name="name" required minlength="1" maxlength="200"
+                   placeholder="例如:IASA-2D-12x12-1"
+                   value="{{ experiment.name if experiment else '' }}">
+        </div>
+
+        <div class="form-row">
+            <label>简介</label>
+            <textarea name="description" rows="2">{{ experiment.description if experiment else '' }}</textarea>
+        </div>
+
+        <!-- ============= 实验设计区 ============= -->
+        <div class="form-section-title">📐 实验设计</div>
+
+        <div class="form-row">
+            <label>假设 / 目标 (Markdown)</label>
+            <textarea name="hypothesis" rows="3"
+                      placeholder="这次实验想验证什么? 预期达到什么指标?">{% if experiment %}{{ experiment.hypothesis }}{% endif %}</textarea>
+        </div>
+
+        <div class="form-row">
+            <label>设计备注 (Markdown)</label>
+            <textarea name="design_notes" rows="3"
+                      placeholder="参数选择依据、方案细节、与上一次实验的差异点…">{% if experiment %}{{ experiment.design_notes }}{% endif %}</textarea>
+        </div>
+
+        <div class="form-row">
+            <label>超参数 / 配置 (JSON)</label>
+            <textarea name="config_json" rows="6"
+                      placeholder='{"lr": 0.001, "batch_size": 32}'>{{ config_json }}</textarea>
+            <small style="color: var(--c-text-soft); font-size: 11.5px;">
+                必须是合法 JSON。留空或填 <code>{}</code> 表示无配置。
+            </small>
+        </div>
+
+        <!-- ============= 实验结果区 ============= -->
+        <div class="form-section-title">📊 实验结果</div>
+
+        <div class="form-row">
+            <label>结果小结 (Markdown)</label>
+            <textarea name="result_summary" rows="4"
+                      placeholder="最终结论、关键数字、意外发现…">{% if experiment %}{{ experiment.result_summary }}{% endif %}</textarea>
+        </div>
+
+        <!-- ============= 元数据 ============= -->
+        <div class="form-grid">
+            <div class="form-row">
+                <label>截止日期 (可选)</label>
+                <input type="date" name="due_date"
+                       value="{{ experiment.due_date if experiment and experiment.due_date else '' }}">
+            </div>
+            <div class="form-row">
+                <label>Git commit</label>
+                <input type="text" name="git_commit"
+                       value="{{ experiment.git_commit if experiment else '' }}">
+            </div>
+        </div>
+
+        <div class="form-actions">
+            <button type="submit" class="btn btn-primary"
+                    {% if action == 'Create' and (not goals or goals|length == 0) %}disabled{% endif %}>
+                {{ action }}
+            </button>
+            <a href="{{ '/experiments/' + experiment.id|string if experiment else '/projects/' + project.id|string }}"
+               class="btn btn-outline">取消</a>
+        </div>
+    </form>
+</div>
+{% endblock %}

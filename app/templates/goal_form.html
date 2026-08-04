@@ -1,0 +1,47 @@
+{% extends "base.html" %}
+{% block title %}{{ action }}大目标 · {{ project.name }}{% endblock %}
+
+{% block content %}
+<div class="breadcrumb">
+    <a href="/projects">研究项目</a>
+    <span class="sep">/</span>
+    <a href="/projects/{{ project.id }}">{{ project.name }}</a>
+    <span class="sep">/</span> {{ action }}大目标
+</div>
+
+<div class="today-header">
+    <h1>🎯 {{ action }}大目标</h1>
+</div>
+
+<div class="card" style="max-width: 760px;">
+    <p style="color: var(--c-text-soft); font-size: 13px; margin-bottom: 16px;">
+        大目标是项目里需要完成的"几件事"。每个大目标会拆解为若干实验（小目标）去完成。
+    </p>
+
+    <form method="post" action="{% if goal %}/goals/{{ goal.id }}{% else %}/projects/{{ project.id }}/goals{% endif %}">
+        <div class="form-row">
+            <label>目标名 *</label>
+            <input type="text" name="name" required minlength="1" maxlength="200"
+                   placeholder="例如:12×12 阵列声源定位算法选型"
+                   value="{{ goal.name if goal else '' }}">
+        </div>
+
+        <div class="form-row">
+            <label>完成标准 / 描述 (Markdown)</label>
+            <textarea name="description" rows="4"
+                      placeholder="什么算"完成了"? 期望达到什么指标?">{% if goal %}{{ goal.description }}{% endif %}</textarea>
+        </div>
+
+        <div class="form-row">
+            <label>排序（可选）</label>
+            <input type="number" name="order" placeholder="留空按创建时间"
+                   value="{{ goal.order if goal and goal.order is not none else '' }}">
+        </div>
+
+        <div class="form-actions">
+            <button type="submit" class="btn btn-primary">{{ action }}</button>
+            <a href="/projects/{{ project.id }}" class="btn btn-outline">取消</a>
+        </div>
+    </form>
+</div>
+{% endblock %}

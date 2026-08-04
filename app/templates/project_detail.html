@@ -1,0 +1,206 @@
+{% extends "base.html" %}
+{% block title %}{{ project.name }} · {{ app_name }}{% endblock %}
+
+{% block content %}
+<div class="breadcrumb">
+    <a href="/projects">研究项目</a> <span class="sep">/</span> {{ project.name }}
+</div>
+
+<!-- ============= 标题 ============= -->
+<div class="today-header">
+    <h1>{{ project.name }}</h1>
+    <div style="margin-left: auto; display: flex; gap: 8px;">
+        <a href="/projects/{{ project.id }}/edit" class="btn btn-outline">✏️ 编辑</a>
+        <form method="post" action="/projects/{{ project.id }}/delete"
+              onsubmit="return confirm('确认删除项目「{{ project.name }}」?\\n\\n项目下所有大目标 / 实验 / 指标 / 笔记 / 决策都会被删除，且无法恢复!')"
+              style="display:inline;">
+            <button type="submit" class="btn btn-outline"
+                    style="color: var(--c-danger); border-color: var(--c-danger);">
+                🗑 删除项目
+            </button>
+        </form>
+    </div>
+</div>
+
+<!-- ============= 流水线 stepper（可点击切换）============= -->
+<div class="card">
+    <div class="card-header">
+        <h3>📈 当前研究阶段</h3>
+        <span style="font-size: 12px; color: var(--c-text-soft);">阶段 {{ project.current_stage }} / 5 · 点击切换</span>
+    </div>
+    <form method="post" action="/projects/{{ project.id }}/stage" id="stage-form">
+        <input type="hidden" name="stage" id="stage-input" value="{{ project.current_stage }}">
+        <div class="pipeline-stepper">
+            {% for num, name in pipeline_stages %}
+            {% set idx = loop.index0 %}
+            <button type="submit" class="pipeline-step {% if idx < project.current_stage - 1 %}done{% endif %} {% if idx == project.current_stage - 1 %}active{% endif %}"
+                    onclick="document.getElementById('stage-input').value='{{ num }}';"
+                    title="切换到「{{ name }}」阶段">
+                <span class="step-num">{{ num }}</span>
+                <span>{{ name }}</span>
+            </button>
+            {% endfor %}
+        </div>
+    </form>
+    <div class="pipeline-current">
+        当前阶段：<strong>{{ pipeline_stages[project.current_stage - 1][1] }}</strong>
+        {% if project.current_stage < 5 %}
+        → 下一步 <strong>{{ pipeline_stages[project.current_stage][1] }}</strong>
+        {% else %}
+        · 全部完成 ✓
+        {% endif %}
+    </div>
+</div>
+
+<!-- ============= 大目标列表 ============= -->
+<div class="card">
+    <div class="card-header">
+        <h3>🎯 大目标
+            <small style="color: var(--c-text-soft); font-weight: normal;">
+                · {{ goal_cards|length }} 个目标
+            </small>
+        </h3>
+        <a href="/projects/{{ project.id }}/goals/new" class="btn btn-primary">+ 新建大目标</a>
+    </div>
+
+    {% if goal_cards %}
+        {% for card in goal_cards %}
+        <div class="goal-card">
+            <div class="goal-header">
+                <div class="goal-title">
+                    <span class="goal-icon">🎯</span>
+                    <a href="/goals/{{ card.goal.id }}/edit" class="goal-name">{{ card.goal.name }}</a>
+                </div>
+                <div class="goal-meta">
+                    <small style="color: var(--c-text-soft);">
+                        实验 {{ card.experiments|length }} 个
+                        · 已上传结果 {{ card.experiments|selectattr('experiment.result_summary')|list|length }} 个
+                    </small>
+                    <form method="post" action="/goals/{{ card.goal.id }}/delete"
+                          onsubmit="return confirm('确认删除大目标「{{ card.goal.name }}」? 其下所有实验也会被删除!')"
+                          style="display:inline; margin-left: 8px;">
+                        <button type="submit" class="btn btn-outline"
+                                style="padding: 2px 8px; font-size: 11px;">🗑</button>
+                    </form>
+                </div>
+            </div>
+
+            {% if card.goal.description %}
+            <div class="md" style="margin: 6px 0 10px; font-size: 13px; color: var(--c-text-soft);">
+                {{ card.goal.description | markdown | safe }}
+            </div>
+            {% endif %}
+
+            <!-- 该目标下的实验 -->
+            {% if card.experiments %}
+            <table class="tbl" style="margin-top: 4px;">
+                <thead>
+                    <tr><th>实验</th><th>结果</th><th>指标</th><th>笔记</th><th>更新</th><th></th></tr>
+                </thead>
+                <tbody>
+                    {% for item in card.experiments %}
+                    <tr>
+                        <td>
+                            <a href="/experiments/{{ item.experiment.id }}">
+                                <strong>{{ item.experiment.name }}</strong>
+                            </a>
+                            {% if item.experiment.hypothesis %}
+                            <br><small style="color: var(--c-text-soft);">
+                                {{ item.experiment.hypothesis[:60] }}{% if item.experiment.hypothesis|length > 60 %}…{% endif %}
+                            </small>
+                            {% endif %}
+                        </td>
+                        <td>
+                            {% if item.experiment.result_summary %}
+                                <span class="dot dot-green" title="已上传结果"></span>
+                                <small style="color: var(--c-text-soft);">已上传</small>
+                            {% else %}
+                                <span class="dot dot-purple" title="无结果"></span>
+                                <small style="color: var(--c-text-soft);">未上传</small>
+                            {% endif %}
+                        </td>
+                        <td>{{ item.metric_count }}</td>
+                        <td>{{ item.note_count }}</td>
+                        <td style="color: var(--c-text-soft); white-space: nowrap;">
+                            {{ item.experiment.updated_at | fmt_dt }}
+                        </td>
+                        <td>
+                            <div style="display: flex; gap: 4px; justify-content: flex-end;">
+                                <a href="/experiments/{{ item.experiment.id }}/edit"
+                                   class="btn btn-outline"
+                                   style="padding: 2px 8px; font-size: 11px;">编辑</a>
+                                <form method="post"
+                                      action="/experiments/{{ item.experiment.id }}/delete"
+                                      onsubmit="return confirm('确认删除实验「{{ item.experiment.name }}」？\n\n该实验下的指标和笔记也会一起删除，且无法恢复！')"
+                                      style="display:inline;">
+                                    <button type="submit" class="btn btn-outline"
+                                            title="删除实验"
+                                            style="padding: 2px 8px; font-size: 11px; color: var(--c-danger); border-color: var(--c-danger);">🗑</button>
+                                </form>
+                            </div>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+            {% else %}
+            <p style="color: var(--c-text-soft); font-size: 12.5px; padding: 8px 0; margin: 0;">
+                还没拆解实验 — 设计首个实验来拆解这个目标
+            </p>
+            {% endif %}
+
+            <div style="margin-top: 10px;">
+                <a href="/projects/{{ project.id }}/experiments/new?goal_id={{ card.goal.id }}"
+                   class="btn btn-outline"
+                   style="padding: 4px 10px; font-size: 12px;">
+                   + 在此目标下新建实验
+                </a>
+            </div>
+        </div>
+        {% endfor %}
+    {% else %}
+        <div style="text-align: center; padding: 28px; color: var(--c-text-soft);">
+            <p style="margin-bottom: 8px;">本项目还没有大目标。</p>
+            <a href="/projects/{{ project.id }}/goals/new" class="btn btn-primary">
+                + 创建第一个大目标
+            </a>
+        </div>
+    {% endif %}
+</div>
+
+<!-- ============= 决策日志 ============= -->
+<div class="card">
+    <div class="card-header">
+        <h3>⚖️ 决策日志</h3>
+        <form method="post" action="/projects/{{ project.id }}/decisions" style="display: flex; gap: 6px;">
+            <input type="text" name="content" placeholder="新增待跟进决策…" required
+                   style="padding: 5px 10px; border: 1px solid var(--c-border); border-radius: var(--radius-md); font-size: 12px; min-width: 240px;">
+            <button type="submit" class="btn btn-primary" style="padding: 5px 12px; font-size: 12px;">+ 添加</button>
+        </form>
+    </div>
+    {% if decisions %}
+    <ul class="decision-list">
+        {% for d in decisions %}
+        <li class="decision-item">
+            <span class="decision-content">{{ d.content }}</span>
+            <span style="font-size: 11px; color: var(--c-text-faint);">{{ d.created_at | fmt_dt }}</span>
+            {% if d.status == '已解决' %}
+                <span class="badge badge-done">已解决</span>
+            {% else %}
+                <span class="badge badge-pending">待跟进</span>
+            {% endif %}
+            <form method="post" action="/decisions/{{ d.id }}/resolve" style="display:inline;">
+                <button type="submit" class="btn btn-outline" style="padding: 2px 8px; font-size: 11px;">✓</button>
+            </form>
+            <form method="post" action="/decisions/{{ d.id }}/delete" style="display:inline;">
+                <button type="submit" class="btn btn-outline" style="padding: 2px 8px; font-size: 11px;">×</button>
+            </form>
+        </li>
+        {% endfor %}
+    </ul>
+    {% else %}
+    <p style="text-align: center; color: var(--c-text-soft); padding: 16px;">暂无决策记录</p>
+    {% endif %}
+</div>
+
+{% endblock %}

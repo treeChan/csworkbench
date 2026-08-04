@@ -1,0 +1,193 @@
+{% extends "base.html" %}
+{% block title %}{{ experiment.name }} · {{ project.name }}{% endblock %}
+
+{% block content %}
+<div class="breadcrumb">
+    <a href="/projects">研究项目</a>
+    <span class="sep">/</span>
+    <a href="/projects/{{ project.id }}">{{ project.name }}</a>
+    {% if goal %}<span class="sep">/</span><a href="/goals/{{ goal.id }}/edit">🎯 {{ goal.name }}</a>{% endif %}
+    <span class="sep">/</span> {{ experiment.name }}
+</div>
+
+<!-- ============= 标题 ============= -->
+<div class="today-header">
+    <h1>
+        🧪 {{ experiment.name }}
+        {% if experiment.result_summary %}
+            <span class="dot dot-green" title="已上传结果"></span>
+        {% else %}
+            <span class="dot dot-purple" title="无结果"></span>
+        {% endif %}
+    </h1>
+    <div style="margin-left: auto; display: flex; gap: 8px;">
+        <a href="/experiments/{{ experiment.id }}/results" class="btn btn-primary">📤 上传结果</a>
+        <a href="/experiments/{{ experiment.id }}/edit" class="btn btn-outline">✏️ 编辑</a>
+        <form method="post" action="/experiments/{{ experiment.id }}/delete"
+              onsubmit="return confirm('确认删除实验「{{ experiment.name }}」?')" style="display:inline;">
+            <button type="submit" class="btn btn-outline">🗑 删除</button>
+        </form>
+    </div>
+</div>
+
+<!-- ============= 元数据条 ============= -->
+<div class="card" style="margin-bottom: 14px;">
+    <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; font-size: 13px;">
+        <div>
+            <div style="color: var(--c-text-soft); font-size: 11.5px; margin-bottom: 2px;">截止日期</div>
+            <div>{{ experiment.due_date or '—' }}</div>
+        </div>
+        <div>
+            <div style="color: var(--c-text-soft); font-size: 11.5px; margin-bottom: 2px;">Git commit</div>
+            <div style="font-family: ui-monospace, monospace; font-size: 12px;">
+                {{ experiment.git_commit or '—' }}
+            </div>
+        </div>
+        <div>
+            <div style="color: var(--c-text-soft); font-size: 11.5px; margin-bottom: 2px;">所属大目标</div>
+            {% if goal %}<a href="/goals/{{ goal.id }}/edit">{{ goal.name }}</a>
+            {% else %}<span style="color: var(--c-text-faint);">未挂目标</span>{% endif %}
+        </div>
+    </div>
+</div>
+
+<!-- ============================================================== -->
+<!-- 实验设计区 -->
+<!-- ============================================================== -->
+<div class="section-divider">
+    <span class="section-icon">📐</span>
+    <span class="section-title">实验设计</span>
+    <span class="section-sub">想做什么 / 怎么做 / 用什么参数</span>
+</div>
+
+<div style="display: grid; grid-template-columns: 1fr 1fr; gap: 14px;">
+    <!-- 假设 / 目标 -->
+    <div class="card">
+        <h3 class="card-title">🎯 假设 / 目标</h3>
+        {% if experiment.hypothesis %}
+            <div class="md">{{ experiment.hypothesis | markdown | safe }}</div>
+        {% else %}
+            <p style="color: var(--c-text-soft); font-size: 13px;">（未填写假设）</p>
+        {% endif %}
+    </div>
+
+    <!-- 设计备注 -->
+    <div class="card">
+        <h3 class="card-title">📝 设计备注</h3>
+        {% if experiment.design_notes %}
+            <div class="md">{{ experiment.design_notes | markdown | safe }}</div>
+        {% else %}
+            <p style="color: var(--c-text-soft); font-size: 13px;">（未填写设计备注）</p>
+        {% endif %}
+    </div>
+</div>
+
+<!-- 配置文件 -->
+<div class="card">
+    <h3 class="card-title">⚙️ 配置文件 (JSON)</h3>
+    {% if experiment.config %}
+        <pre style="background: var(--c-bg-soft); padding: 10px 12px; border-radius: var(--radius-md); font-size: 12px; line-height: 1.55; overflow-x: auto; max-height: 320px;">{{ experiment.config | fmt_config }}</pre>
+    {% else %}
+        <p style="color: var(--c-text-soft); font-size: 13px;">（空配置）</p>
+    {% endif %}
+</div>
+
+<!-- ============================================================== -->
+<!-- 实验结果区（只展示，编辑请去 /experiments/{id}/results） -->
+<!-- ============================================================== -->
+<div class="section-divider">
+    <span class="section-icon">📊</span>
+    <span class="section-title">实验结果</span>
+    <span class="section-sub">
+        {% if experiment.result_summary or metrics or notes %}
+            <a href="/experiments/{{ experiment.id }}/results"
+               style="color: var(--c-primary); text-decoration: underline;">
+               → 前往上传结果页编辑
+            </a>
+        {% else %}
+            <a href="/experiments/{{ experiment.id }}/results"
+               style="color: var(--c-primary); text-decoration: underline;">
+               → 跑完实验后点这里上传结果
+            </a>
+        {% endif %}
+    </span>
+</div>
+
+<!-- 结果小结 -->
+<div class="card">
+    <h3 class="card-title">💡 结果小结</h3>
+    {% if experiment.result_summary %}
+        <div class="md">{{ experiment.result_summary | markdown | safe }}</div>
+    {% else %}
+        <p style="color: var(--c-text-soft); font-size: 13px;">（未上传结果）</p>
+    {% endif %}
+</div>
+
+<!-- 指标曲线 -->
+<div class="card">
+    <div class="card-header">
+        <h3>📈 训练曲线 <small style="color: var(--c-text-soft); font-weight: normal;">({{ metrics|length }} 项)</small></h3>
+    </div>
+
+    {% if metrics_grouped %}
+        {% for key, points in metrics_grouped.items() %}
+        <div style="margin-bottom: 14px;">
+            <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 6px;">
+                <strong style="color: var(--c-primary); font-size: 13px;">{{ key }}</strong>
+                <span style="font-size: 11.5px; color: var(--c-text-soft);">({{ points|length }} 个点)</span>
+            </div>
+            {% set ns = namespace(max_val=0.0, min_val=0.0) %}
+            {% for p in points %}
+                {% if loop.first %}
+                    {% set ns.max_val = p.value %}
+                    {% set ns.min_val = p.value %}
+                {% else %}
+                    {% if p.value > ns.max_val %}{% set ns.max_val = p.value %}{% endif %}
+                    {% if p.value < ns.min_val %}{% set ns.min_val = p.value %}{% endif %}
+                {% endif %}
+            {% endfor %}
+            {% set span = (ns.max_val - ns.min_val) if (ns.max_val - ns.min_val) > 0 else 1.0 %}
+            {% set n_pts = points|length %}
+            <svg width="100%" height="140" viewBox="0 0 800 140"
+                 preserveAspectRatio="none"
+                 style="background: var(--c-bg-soft); border-radius: var(--radius-md); border: 1px solid var(--c-border);">
+                <polyline fill="none" stroke="#7C3AED" stroke-width="1.8"
+                    points="{% for p in points %}{% set xi = (loop.index0 * 800.0 / (n_pts + 1)) %}{% set yi = (130 - ((p.value - ns.min_val) / span * 110 + 5)) %}{{ '%.1f,%.1f' | format(xi, yi) }} {% endfor %}"/>
+                {% for p in points %}
+                    {% set xi = (loop.index0 * 800.0 / (n_pts + 1)) %}
+                    {% set yi = (130 - ((p.value - ns.min_val) / span * 110 + 5)) %}
+                    <circle cx="{{ '%.1f' | format(xi) }}" cy="{{ '%.1f' | format(yi) }}" r="2.5" fill="#7C3AED"/>
+                {% endfor %}
+            </svg>
+        </div>
+        {% endfor %}
+    {% else %}
+        <p style="text-align: center; color: var(--c-text-soft); padding: 16px;">
+            （还没有指标 — 去<a href="/experiments/{{ experiment.id }}/results"
+            style="color: var(--c-primary);">上传结果</a>添加）
+        </p>
+    {% endif %}
+</div>
+
+<!-- 笔记 -->
+<div class="card">
+    <div class="card-header">
+        <h3>📒 观察笔记 <small style="color: var(--c-text-soft); font-weight: normal;">({{ notes|length }} 条)</small></h3>
+    </div>
+
+    {% if notes %}
+        {% for n in notes %}
+        <div style="border-left: 3px solid var(--c-primary-light); padding: 8px 12px; margin-bottom: 10px; background: var(--c-bg-soft); border-radius: 0 var(--radius-md) var(--radius-md) 0;">
+            <div class="md">{{ n.content | markdown | safe }}</div>
+            <small style="color: var(--c-text-faint); font-size: 11.5px;">{{ n.created_at | fmt_dt }}</small>
+        </div>
+        {% endfor %}
+    {% else %}
+        <p style="text-align: center; color: var(--c-text-soft); padding: 16px;">
+            （还没有笔记 — 去<a href="/experiments/{{ experiment.id }}/results"
+            style="color: var(--c-primary);">上传结果</a>添加）
+        </p>
+    {% endif %}
+</div>
+
+{% endblock %}

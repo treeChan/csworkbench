@@ -1,0 +1,164 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}{{ app_name|default('Workbench') }}{% endblock %}</title>
+    <link rel="stylesheet" href="/static/style.css">
+    <script src="https://cdn.jsdelivr.net/npm/htmx.org@2.0.4/dist/htmx.min.js" defer></script>
+    {% block head %}{% endblock %}
+</head>
+<body class="app">
+
+<!-- =================== 顶部栏 =================== -->
+<header class="topbar">
+    <div class="topbar-left">
+        <div class="project-switcher">
+            <span class="rocket">🚀</span>
+            <span class="brand">Workbench</span>
+            <span class="brand-sub">研究驾驶舱</span>
+        </div>
+        <select class="project-select" onchange="if(this.value) location.href=this.value">
+            <option value="/projects"
+                    {% if not active_project %}selected{% endif %}>
+                — 切换项目 —
+            </option>
+            {% for p in projects_for_switcher|default([]) %}
+            <option value="/projects/{{ p.id }}"
+                    {% if active_project and active_project.id == p.id %}selected{% endif %}>
+                {{ p.name }}
+            </option>
+            {% endfor %}
+        </select>
+    </div>
+
+    <div class="topbar-center">
+        <div class="search-box">
+            <span class="search-icon">🔍</span>
+            <input type="search" placeholder="搜索项目、工况、结论或文件">
+            <kbd>Ctrl K</kbd>
+        </div>
+    </div>
+
+    <div class="topbar-right">
+        <button class="btn btn-primary">+ 快速创建</button>
+        <button class="icon-btn" title="主题切换">🌙</button>
+        <div class="avatar">Z</div>
+    </div>
+</header>
+
+<!-- =================== 整体布局 =================== -->
+<div class="layout">
+
+    <!-- 左侧导航 -->
+    <nav class="sidebar">
+        <ul class="nav-list">
+            <li class="nav-item {% if active_nav == 'today' %}active{% endif %}">
+                <a href="/"><span class="nav-icon">🏠</span> 今日</a>
+            </li>
+            <li class="nav-item {% if active_nav == 'projects' %}active{% endif %}">
+                <a href="/projects"><span class="nav-icon">📁</span> 研究项目</a>
+            </li>
+            <li class="nav-item {% if active_nav == 'simulations' %}active{% endif %}">
+                <a href="/cases"><span class="nav-icon">🧪</span> 仿真与试验</a>
+            </li>
+            <li class="nav-item {% if active_nav == 'files' %}active{% endif %}">
+                <a href="/files"><span class="nav-icon">📦</span> 文件与成果</a>
+            </li>
+            <li class="nav-item {% if active_nav == 'review' %}active{% endif %}">
+                <a href="/review"><span class="nav-icon">📅</span> 周复盘</a>
+            </li>
+        </ul>
+
+        <div class="sidebar-bottom">
+            <ul class="nav-list">
+                <li class="nav-item {% if active_nav == 'settings' %}active{% endif %}">
+                    <a href="/settings"><span class="nav-icon">⚙️</span> 设置</a>
+                </li>
+            </ul>
+        </div>
+    </nav>
+
+    <!-- 中间主区 -->
+    <main class="main-content">
+        {% if error %}
+        <div class="alert alert-error">
+            <strong>错误：</strong> {{ error }}
+        </div>
+        {% endif %}
+
+        {% block content %}{% endblock %}
+    </main>
+
+    <!-- 右侧边栏 -->
+    <aside class="rightbar">
+        {% block rightbar %}
+        <section class="card">
+            <h3 class="card-title">⚡ 快速记录</h3>
+
+            {% if active_project %}
+            <form method="post" action="/projects/{{ active_project.id }}/quick-records" id="quick-form">
+                <div class="quick-types">
+                    <button type="button" class="quick-type active" data-type="task"
+                            onclick="selectQuickType(this)">📋 任务</button>
+                    <button type="button" class="quick-type" data-type="idea"
+                            onclick="selectQuickType(this)">💡 科研想法</button>
+                    <button type="button" class="quick-type" data-type="simulation"
+                            onclick="selectQuickType(this)">⚠️ 仿真问题</button>
+                    <button type="button" class="quick-type" data-type="revision"
+                            onclick="selectQuickType(this)">📝 论文修改点</button>
+                </div>
+                <input type="hidden" name="record_type" id="quick-record-type" value="task">
+                <textarea name="content" class="quick-input"
+                          placeholder="写一条「{{ active_project.name }}」下的待办 / 想法…"
+                          rows="4" required></textarea>
+                <button type="submit" class="btn btn-primary btn-full">记录</button>
+            </form>
+            <p style="font-size: 11px; color: var(--c-text-faint); margin: 6px 0 0;">
+                将作为决策记录到「{{ active_project.name }}」
+            </p>
+            {% else %}
+            <p style="font-size: 12px; color: var(--c-text-soft); padding: 12px 0;">
+                请先在顶部下拉中选择一个项目
+            </p>
+            {% endif %}
+        </section>
+
+        {% if rightbar_decisions %}
+        <section class="card">
+            <h3 class="card-title">⚖️ 未关闭决策</h3>
+            <ul class="decision-list">
+                {% for d in rightbar_decisions %}
+                <li class="decision-item">
+                    <span class="decision-content">{{ d.content }}</span>
+                    <span class="badge badge-pending">{{ d.status }}</span>
+                </li>
+                {% endfor %}
+            </ul>
+        </section>
+        {% endif %}
+        {% endblock %}
+    </aside>
+</div>
+
+<!-- =================== 底部状态栏 =================== -->
+<footer class="statusbar">
+    <span class="status-item">📦 本地模式（数据仅保存在本机）</span>
+    <span class="status-item status-ok">● 数据库健康：正常</span>
+    <span class="status-item">✓ 自动保存已开启</span>
+    <span class="status-right">
+        <kbd>Ctrl K</kbd> 搜索 · <kbd>Ctrl N</kbd> 新建
+    </span>
+</footer>
+
+{% block scripts %}
+<script>
+function selectQuickType(btn) {
+    document.querySelectorAll('.quick-type').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    document.getElementById('quick-record-type').value = btn.dataset.type;
+}
+</script>
+{% endblock %}
+</body>
+</html>

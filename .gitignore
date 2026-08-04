@@ -1,0 +1,24 @@
+# ---- 使用者的个人数据(绝不入库)----
+# data/ 下只保留 .gitkeep,数据库文件属于每个人自己
+data/*
+!data/.gitkeep
+*.db
+*.db-journal
+*.db-wal
+*.db-shm
+
+# 本地配置(含各自的数据目录路径)
+.env
+
+# ---- Python ----
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+
+# ---- 编辑器 / 系统 ----
+.DS_Store
+.idea/
+.vscode/

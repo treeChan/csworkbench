@@ -1,0 +1,16 @@
+# Workbench 运行依赖
+# 用 ./run.sh (Mac/Linux) 或 run.bat (Windows) 启动时会自动安装,
+# 一般不需要手动执行 pip install。
+
+fastapi>=0.115
+uvicorn[standard]>=0.32
+jinja2>=3.1
+sqlalchemy>=2.0
+python-multipart>=0.0.12
+markdown>=3.7
+pydantic>=2.10
+pydantic-settings>=2.7
+
+# 仅 scripts/example_log.py(从训练脚本推送数据的示例)需要。
+# 不跑那个示例的话用不上,但装着也无妨。
+requests>=2.31
