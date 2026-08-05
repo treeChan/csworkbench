@@ -1,0 +1,34 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <title>Workbench · 启动中</title>
+  <style>
+    body {
+      font-family: system-ui, -apple-system, sans-serif;
+      background: #1e1e2e;
+      color: #cdd6f4;
+      display: grid;
+      place-items: center;
+      height: 100vh;
+      margin: 0;
+    }
+    .spinner {
+      width: 36px;
+      height: 36px;
+      border: 4px solid #45475a;
+      border-top-color: #89b4fa;
+      border-radius: 50%;
+      margin: 0 auto 16px;
+      animation: spin 1s linear infinite;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+  </style>
+</head>
+<body>
+  <div style="text-align:center">
+    <div class="spinner"></div>
+    <div>正在启动本地服务…</div>
+  </div>
+</body>
+</html>

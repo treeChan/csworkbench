@@ -24,6 +24,14 @@ logs/
 run_slurm.sh
 SLURM_DEPLOY.md
 
+# ---- 桌面 App (Tauri) ----
+desktop/node_modules/
+desktop/src-tauri/target/
+desktop/src-tauri/gen/
+desktop/src-tauri/binaries/
+desktop/sidecar/build/
+desktop/sidecar/dist/
+
 # ---- 编辑器 / 系统 ----
 .DS_Store
 .idea/

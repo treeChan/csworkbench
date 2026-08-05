@@ -1,0 +1,15 @@
+# 桌面 sidecar 专用依赖清单
+#
+# 刻意不用 `uvicorn[standard]`：standard 会拉进 uvloop / httptools / watchfiles
+# 三个 C 扩展，PyInstaller 打包麻烦且体积大。本地单用户场景 h11 纯 Python
+# 实现完全够用。
+# 去掉 requests：它只被 scripts/example_log.py 用到，桌面 App 不需要。
+
+fastapi>=0.115
+uvicorn>=0.32
+jinja2>=3.1
+sqlalchemy>=2.0
+python-multipart>=0.0.12
+markdown>=3.7
+pydantic>=2.10
+pydantic-settings>=2.7

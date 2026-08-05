@@ -1,6 +1,11 @@
-# Workbench 运行依赖
+# Workbench 运行依赖（浏览器版）
 # 用 ./run.sh (Mac/Linux) 或 run.bat (Windows) 启动时会自动安装,
 # 一般不需要手动执行 pip install。
+#
+# 桌面 App（desktop/ 目录）用的是另一份独立清单:
+#   desktop/sidecar/requirements-desktop.txt
+# 那里刻意不用 uvicorn[standard]（避开 C 扩展,便于 PyInstaller 打包）。
+# PyInstaller 本身是构建工具,由 CI 单独安装,不在这份清单里。
 
 fastapi>=0.115
 uvicorn[standard]>=0.32

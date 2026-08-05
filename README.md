@@ -9,6 +9,12 @@
 
 ## 快速开始
 
+> **两种打开方式，任选其一：**
+>
+> 1. **🖥️ 桌面 App（推荐）** —— 像普通软件一样双击打开，不需要开浏览器，
+>    也不用装 Python（运行时已一起打包）。
+> 2. **🌐 浏览器版** —— 在项目文件夹里跑启动脚本，浏览器自动打开本地页面。
+
 ### 第一步：把代码弄到本地
 
 **方式 A — 用 git（推荐，以后能一条命令更新）**
@@ -25,7 +31,24 @@ cd workbench
 > 两种方式都能用。区别是：用 git 克隆的，以后作者更新了你跑一句 `git pull` 就同步；
 > 下载 ZIP 的，想更新得重新下载一次（下载前记得先备份好自己的数据文件）。
 
-### 第二步：启动
+### 第二步（方式一）：桌面 App
+
+从项目的 **GitHub Releases** 页下载对应平台的安装包（Windows / macOS / Linux）：
+
+1. 打开 [Releases](https://github.com/treeChan/csworkbench/releases)
+2. 下载最新版对应平台的安装包（.msi / .dmg / .AppImage 等）
+3. 安装后双击图标打开 —— 桌面窗口就是 Workbench，关窗即退出
+
+> 桌面 App 把 Python 运行时一起打包，**不需要安装 Python 3.10+**。
+> 数据存在系统用户数据目录，与浏览器版是两份独立数据：
+> - macOS：`~/Library/Application Support/com.csworkbench.desktop/workbench.db`
+> - Windows：`%APPDATA%\com.csworkbench.desktop\workbench.db`
+> - Linux：`~/.local/share/com.csworkbench.desktop/workbench.db`
+>
+> 想迁移数据：把旧的 `.db` 文件拷到上述目录即可。
+> ⚠️ 未签名版本首次运行时，macOS 需要右键 → 打开（Gatekeeper）。
+
+### 第二步（方式二）：浏览器版
 
 **Mac / Linux** —— 在项目文件夹里打开终端：
 
@@ -216,6 +239,7 @@ API 端点：`GET /api/experiments/{id}/export`
 | 前端 | Jinja2 模板 + 自定义 CSS（紫色主题，不依赖任何 UI 框架） |
 | 图表 | 服务端渲染的内联 SVG |
 | Markdown | python-markdown |
+| 桌面壳 | Tauri v2（`desktop/`，可选：把浏览器版包成桌面 App） |
 
 没有前端构建步骤，改完模板或 CSS 刷新页面就生效。
 
@@ -244,6 +268,9 @@ workbench/
 ├── data/                   # 数据库默认放这儿（已被 git 忽略）
 ├── scripts/
 │   └── example_log.py      # 从训练脚本推送数据的示例
+├── desktop/                # 桌面 App（Tauri v2 套壳 + PyInstaller sidecar）
+│   ├── sidecar/            # Python 服务 → PyInstaller 打包配置
+│   └── src-tauri/          # Tauri 壳源码
 ├── requirements.txt
 └── .env.example
 ```
@@ -255,6 +282,16 @@ workbench/
 ```bash
 ./run.sh --dev
 ```
+
+### 桌面 App（desktop/）
+
+桌面 App = Tauri v2 壳 + PyInstaller 打包的 sidecar（FastAPI 服务）。构建与运维细节见 `desktop/README.md`。
+
+| 事项 | 说明 |
+|---|---|
+| 运行依赖 | **无** —— Python 运行时已打包进安装包 |
+| 构建平台 | GitHub Actions 矩阵（macOS / Windows / Linux），打 `v*` tag 自动出安装包 |
+| 构建依赖 | Rust、Node.js、Python 3.11+、PyInstaller（CI 已自动处理） |
 
 `--dev` 会开启 uvicorn 的自动重载，改完 `.py` 文件不用手动重启。
 （不加这个参数时不会重载，改了 Python 代码需要 `Ctrl+C` 后重新启动。
@@ -273,6 +310,7 @@ workbench/
 - `app/static/charts.js` 目前没有任何模板引用它（指标走的是表格，不再画曲线）
 - `base.html` 加载了本地化的 HTMX（`app/static/htmx.min.js`，不依赖外部 CDN），但代码里还没有用到任何 `hx-*` 属性
 - `WORKBENCH_DEBUG` 和 `WORKBENCH_PAGE_SIZE` 两个配置项已声明但尚未接线
+- 桌面 App 的构建流程（`desktop/` + GitHub Actions 三平台 CI）已就绪，等打 tag 出第一版安装包
 
 ## 排查问题
 

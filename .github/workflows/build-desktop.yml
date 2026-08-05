@@ -1,0 +1,88 @@
+name: build-desktop
+
+# 桌面 App (Tauri) 三平台构建。
+# 触发:推送 v* tag,或手动 workflow_dispatch。
+# 产物:draft Release + workflow artifacts。
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+
+jobs:
+  desktop:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # macOS runner 近年为 arm64;如需 Intel Mac 包,再加 macos-13 一项。
+          - platform: macos-latest
+          - platform: windows-latest
+          - platform: ubuntu-latest
+    runs-on: ${{ matrix.platform }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: swatinem/rust-cache@v2
+        with:
+          workspaces: "./desktop/src-tauri -> target"
+
+      - name: Install Linux system dependencies
+        if: matrix.platform == 'ubuntu-latest'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev build-essential curl wget file \
+            libxdo-dev libssl-dev libayatana-appindicator3-dev librsvg2-dev \
+            libsoup-3.0-dev patchelf
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+          cache-dependency-path: desktop/sidecar/requirements-desktop.txt
+
+      - name: Install Python deps + PyInstaller
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r desktop/sidecar/requirements-desktop.txt
+          pip install "pyinstaller>=6"
+
+      - name: Build sidecar and rename with target triple
+        shell: bash
+        run: |
+          cd desktop/sidecar
+          python -m PyInstaller --clean --noconfirm workbench-server.spec
+          TRIPLE=$(rustc -vV | grep '^host:' | awk '{print $2}')
+          EXT=""
+          if [ "$RUNNER_OS" = "Windows" ]; then EXT=".exe"; fi
+          mkdir -p ../src-tauri/binaries
+          cp "dist/workbench-server${EXT}" "../src-tauri/binaries/workbench-server-${TRIPLE}${EXT}"
+          ls -la ../src-tauri/binaries/
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "lts/*"
+          cache: npm
+          cache-dependency-path: desktop/package-lock.json
+
+      - name: npm ci
+        working-directory: desktop
+        run: npm ci
+
+      # 图标已随仓库提交(src-tauri/icons/),无需在 CI 里重新生成。
+      - name: Build Tauri app (bundle + upload)
+        uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # macOS 签名/公证(可选):APPLE_CERTIFICATE / APPLE_CERTIFICATE_PASSWORD /
+          #   APPLE_SIGNING_IDENTITY / APPLE_ID / APPLE_PASSWORD / APPLE_TEAM_ID
+          # Windows 签名(可选):WINDOWS_CERTIFICATE / WINDOWS_CERTIFICATE_PASSWORD
+        with:
+          projectPath: ./desktop
+          tagName: ${{ github.ref_name }}
+          releaseName: "csworkbench ${{ github.ref_name }}"
+          releaseDraft: true
+          uploadWorkflowArtifacts: true
+          uploadUpdaterJson: false
+          uploadUpdaterSignatures: false
