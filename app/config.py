@@ -36,6 +36,12 @@ class Settings(BaseSettings):
     # 调试模式
     debug: bool = True
 
+    # 上传文件存到哪里（相对 BASE_DIR）。图片、模型权重、附件都落在这里。
+    artifact_dir: str = "data/artifacts"
+
+    # 单个上传文件最大多少 MB（防止误传几个 G 的数据集）
+    max_upload_size_mb: int = 100
+
     model_config = SettingsConfigDict(
         env_prefix="WORKBENCH_",  # 环境变量前缀
         env_file=BASE_DIR / ".env",
@@ -65,3 +71,14 @@ def get_db_url() -> str:
     abs_path = (BASE_DIR / raw).resolve()
     abs_path.parent.mkdir(parents=True, exist_ok=True)
     return f"sqlite:///{abs_path}"
+
+
+def get_artifact_dir() -> Path:
+    """返回上传文件的根目录绝对路径,并确保目录存在。
+
+    跟 db_path 一样的规则:支持相对、绝对、~ 三种写法。
+    """
+    raw = Path(settings.artifact_dir).expanduser()
+    abs_path = (BASE_DIR / raw).resolve()
+    abs_path.mkdir(parents=True, exist_ok=True)
+    return abs_path

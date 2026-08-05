@@ -1,0 +1,76 @@
+{% extends "base.html" %}
+{% block title %}{{ action }}周复盘 · Workbench{% endblock %}
+
+{% block content %}
+<div class="breadcrumb">
+    <a href="/">首页</a>
+    <span class="sep">/</span>
+    <a href="/review">周复盘</a>
+    <span class="sep">/</span> {{ action }}
+</div>
+
+<div class="today-header">
+    <h1>📝 {{ action }}周复盘</h1>
+    <a href="{{ '/review/' + review.id|string if review else '/review' }}"
+       class="btn btn-outline" style="margin-left: auto;">← 返回</a>
+</div>
+
+<div class="card" style="max-width: 880px;">
+
+    {% if action == 'Create' and not reviews %}
+    <div class="alert" style="background: var(--c-primary-bg); color: var(--c-primary); border-left: 3px solid var(--c-primary); margin-bottom: 16px; font-size: 13px;">
+        💡 起始日期默认填的是<strong>本周一</strong>。想写过去某一周也可以直接改日期。
+    </div>
+    {% endif %}
+
+    <form method="post"
+          action="{{ '/review/' + review.id|string if review else '/review/new' }}">
+
+        <div class="form-row">
+            <label>起始日期（周一）*</label>
+            <input type="date" name="week_start_date" required
+                   value="{{ week_start_default }}">
+            <small style="color: var(--c-text-soft); font-size: 11.5px;">
+                每周的复盘用周一日期标识，会按这个排序。
+            </small>
+        </div>
+
+        <div class="form-row">
+            <label>标题</label>
+            <input type="text" name="title"
+                   placeholder="留空则自动用「第 N 周 (YYYY-MM-DD ~ YYYY-MM-DD)」"
+                   value="{{ review.title if review else '' }}">
+        </div>
+
+        <div class="form-row">
+            <label>🌟 本周高光 (Markdown)</label>
+            <textarea name="highlights" rows="4"
+                      placeholder="- 实验 A 终于跑通了&#10;- 论文里 figure 3 重画了&#10;- 周三跟导师讨论有新想法">{% if review %}{{ review.highlights }}{% endif %}</textarea>
+        </div>
+
+        <div class="form-row">
+            <label>🚧 卡点 / 待解决 (Markdown)</label>
+            <textarea name="blockers" rows="4"
+                      placeholder="- 仿真在边界处不稳定&#10;- 还差两组对比实验的数据">{% if review %}{{ review.blockers }}{% endif %}</textarea>
+        </div>
+
+        <div class="form-row">
+            <label>🎯 下周重点 (Markdown)</label>
+            <textarea name="next_focus" rows="4"
+                      placeholder="- 把 batch_size 调到 64 重跑&#10;- 整理 figure 给导师看">{% if review %}{{ review.next_focus }}{% endif %}</textarea>
+        </div>
+
+        <div class="form-row">
+            <label>📄 详细内容 (Markdown)</label>
+            <textarea name="content" rows="8"
+                      placeholder="详细的本周记录、随笔、技术笔记…">{% if review %}{{ review.content }}{% endif %}</textarea>
+        </div>
+
+        <div class="form-actions">
+            <button type="submit" class="btn btn-primary">{{ action }}</button>
+            <a href="{{ '/review/' + review.id|string if review else '/review' }}"
+               class="btn btn-outline">取消</a>
+        </div>
+    </form>
+</div>
+{% endblock %}

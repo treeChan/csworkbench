@@ -61,24 +61,36 @@ def create_experiment(
     project_id: int,
     goal_id: int,
     name: str,
-    config: dict | None = None,
     hypothesis: str = "",
 ) -> dict:
+    """创建一次实验。
+
+    注意 2026-08-05 之后 `config` 字段已从 JSON dict 改成 Markdown 文本 (config_md)。
+    训练脚本如果要把超参推过来,请用 config_md 字段,内容是 Markdown 原文;
+    也可以不传,自己在界面里手记。
+    """
     return _post(
         f"/api/projects/{project_id}/experiments",
         {
             "name": name,
             "goal_id": goal_id,
-            "config": config or {},
             "hypothesis": hypothesis,
         },
     )
 
 
-def log_metric(experiment_id: int, key: str, value: float, step: int | None = None) -> dict:
+def log_metric(
+    experiment_id: int, key: str, value: float,
+    note: str = "", step: int | None = None,
+) -> dict:
+    """记录一个数据点。
+
+    2026-08-05 后 `note` 字段取代了曲线用途 —— 它就是这一行的上下文说明,
+    比如「这一轮改了 lr=0.001」「用的是验证集」。
+    """
     return _post(
         f"/api/experiments/{experiment_id}/metrics",
-        {"key": key, "value": value, "step": step},
+        {"key": key, "value": value, "note": note, "step": step},
     )
 
 
@@ -118,20 +130,19 @@ def demo() -> None:
         proj["id"],
         goal_id=goal["id"],
         name="IASA-2D-鸽子-v1",
-        config={"freq_hz": 2_060_000, "aperture_mm": 50, "sla_resolution_um": 25},
         hypothesis="验证 2D 角谱反演在 50mm 口径下的可行性",
     )
     print(f"  experiment: {exp['name']} (id={exp['id']})")
 
-    # 模拟一个 loss 曲线
+    # 模拟记录 20 个 loss 点 + 2 个最终指标
     import math
 
     for step in range(20):
         loss = math.exp(-step / 8) + 0.01 * (step % 3)
-        log_metric(exp["id"], "loss", loss, step=step)
+        log_metric(exp["id"], "loss", loss, note=f"step={step}", step=step)
 
-    log_metric(exp["id"], "psnr_db", 32.4)
-    log_metric(exp["id"], "ssim", 0.91)
+    log_metric(exp["id"], "psnr_db", 32.4, note="最终测试集")
+    log_metric(exp["id"], "ssim", 0.91, note="最终测试集")
     print("  logged 20 loss points + 2 final metrics")
 
     log_note(

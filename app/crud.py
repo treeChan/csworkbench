@@ -6,13 +6,17 @@
 
 from __future__ import annotations
 
+import secrets
 from datetime import datetime, date
+from pathlib import Path
 from typing import Sequence
 
+from fastapi import UploadFile
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app import models, schemas
+from app.config import get_artifact_dir
 
 
 # ---------------------------------------------------------------------------
@@ -105,7 +109,8 @@ def create_experiment(
         hypothesis=data.hypothesis,
         design_notes=data.design_notes,
         result_summary=data.result_summary,
-        config=data.config,
+        # 2026-08-05: config (JSON dict) → config_md (Markdown 文字)
+        config_md=data.config_md,
         due_date=_parse_date(data.due_date),
         git_commit=data.git_commit,
     )
@@ -141,10 +146,11 @@ def delete_experiment(db: Session, experiment: models.Experiment) -> None:
 def list_metrics(
     db: Session, experiment_id: int
 ) -> Sequence[models.Metric]:
+    # 2026-08-05: 不再按 step 排序画曲线,按记录时间排就行
     stmt = (
         select(models.Metric)
         .where(models.Metric.experiment_id == experiment_id)
-        .order_by(models.Metric.step.asc().nulls_last(), models.Metric.timestamp.asc())
+        .order_by(models.Metric.timestamp.asc(), models.Metric.id.asc())
     )
     return db.scalars(stmt).all()
 
@@ -156,6 +162,7 @@ def create_metric(
         experiment_id=experiment_id,
         key=data.key,
         value=data.value,
+        note=data.note,
         step=data.step,
     )
     db.add(metric)
@@ -339,6 +346,244 @@ def delete_decision(db: Session, decision: models.Decision) -> None:
 
 
 # ---------------------------------------------------------------------------
+# Artifact (文件与成果)
+# ---------------------------------------------------------------------------
+
+
+# 已知是模型权重的文件后缀（小写）
+_MODEL_EXTS = {".pt", ".pth", ".onnx", ".h5", ".hdf5", ".safetensors", ".bin", ".ckpt", ".pb"}
+
+
+def _classify_kind(original_name: str, mime_type: str | None) -> str:
+    """根据文件名/MIME 推断 kind:image / model / other。"""
+    if mime_type and mime_type.startswith("image/"):
+        return "image"
+    # 用后缀兜底
+    suffix = Path(original_name).suffix.lower()
+    if suffix in _MODEL_EXTS:
+        return "model"
+    if mime_type and mime_type == "application/octet-stream":
+        return "model" if suffix in _MODEL_EXTS else "other"
+    return "other"
+
+
+def _owner_subdir(owner_kind: str, owner_id: int) -> str:
+    """在 artifact_dir 下的子目录名,例如 'project_3'。"""
+    return f"{owner_kind}_{owner_id}"
+
+
+def _safe_filename(original: str) -> str:
+    """生成不冲突、不可路径注入的文件名。保留原后缀,前缀随机。"""
+    suffix = Path(original).suffix.lower()
+    # 防止后缀被注入目录分隔符 —— 只保留最后一段
+    safe_suffix = "".join(c for c in suffix if c.isalnum() or c in ".~")
+    return f"{secrets.token_hex(12)}{safe_suffix}"
+
+
+def save_artifact_file(
+    file: UploadFile,
+    owner_kind: str,  # 'project' / 'goal' / 'experiment'
+    owner_id: int,
+) -> tuple[str, str, int, str]:
+    """把上传的文件写到磁盘,返回 (stored_relative_path, stored_name, size_bytes, mime_type)。
+
+    写入路径:{artifact_dir}/{owner_kind}_{owner_id}/{stored_name}
+    """
+    artifact_dir = get_artifact_dir()
+    sub = artifact_dir / _owner_subdir(owner_kind, owner_id)
+    sub.mkdir(parents=True, exist_ok=True)
+
+    stored_name = _safe_filename(file.filename or "upload")
+    dest = sub / stored_name
+
+    # 一次性读取再写,大文件会占内存但 UI 不让传超大的,够用
+    content = file.file.read()
+    size = len(content)
+    dest.write_bytes(content)
+    file.file.seek(0)  # 复位方便上层再用
+
+    rel_path = f"{_owner_subdir(owner_kind, owner_id)}/{stored_name}"
+    mime = file.content_type or "application/octet-stream"
+    return rel_path, stored_name, size, mime
+
+
+def delete_artifact_file(stored_path: str) -> None:
+    """从磁盘删除文件。不存在不报错(幂等)。"""
+    artifact_dir = get_artifact_dir()
+    target = artifact_dir / stored_path
+    try:
+        if target.is_file():
+            target.unlink()
+        # 顺手清空空目录(不要清非空目录,可能还有别的文件)
+        parent = target.parent
+        if parent.exists() and not any(parent.iterdir()):
+            parent.rmdir()
+    except OSError:
+        # 文件 IO 失败不能阻塞主流程
+        pass
+
+
+def create_artifact(
+    db: Session,
+    file: UploadFile,
+    *,
+    owner_kind: str,
+    owner_id: int,
+    description: str = "",
+) -> models.Artifact:
+    """保存文件到磁盘并写入 Artifact 行。原子性:文件写失败就不建 DB 行。"""
+    rel_path, stored_name, size, mime = save_artifact_file(
+        file, owner_kind, owner_id
+    )
+    kind = _classify_kind(file.filename or "", mime)
+
+    kwargs: dict = {
+        "original_name": file.filename or stored_name,
+        "stored_name": stored_name,
+        "stored_path": rel_path,
+        "kind": kind,
+        "mime_type": mime,
+        "size_bytes": size,
+        "description": description,
+    }
+    if owner_kind == "project":
+        kwargs["project_id"] = owner_id
+    elif owner_kind == "goal":
+        kwargs["goal_id"] = owner_id
+    elif owner_kind == "experiment":
+        kwargs["experiment_id"] = owner_id
+    else:
+        raise ValueError(f"未知的 owner_kind: {owner_kind}")
+
+    artifact = models.Artifact(**kwargs)
+    db.add(artifact)
+    db.commit()
+    db.refresh(artifact)
+    return artifact
+
+
+def get_artifact(db: Session, artifact_id: int) -> models.Artifact | None:
+    return db.get(models.Artifact, artifact_id)
+
+
+def list_artifacts(
+    db: Session,
+    *,
+    project_id: int | None = None,
+    goal_id: int | None = None,
+    experiment_id: int | None = None,
+    kind: str | None = None,
+) -> Sequence[models.Artifact]:
+    """按归属与类型筛列。不传条件就列全部。"""
+    stmt = select(models.Artifact)
+    if project_id is not None:
+        stmt = stmt.where(models.Artifact.project_id == project_id)
+    if goal_id is not None:
+        stmt = stmt.where(models.Artifact.goal_id == goal_id)
+    if experiment_id is not None:
+        stmt = stmt.where(models.Artifact.experiment_id == experiment_id)
+    if kind is not None:
+        stmt = stmt.where(models.Artifact.kind == kind)
+    stmt = stmt.order_by(models.Artifact.uploaded_at.desc())
+    return db.scalars(stmt).all()
+
+
+def delete_artifact(db: Session, artifact: models.Artifact) -> None:
+    """先删磁盘文件,再删 DB 行。"""
+    stored_path = artifact.stored_path
+    db.delete(artifact)
+    db.commit()
+    delete_artifact_file(stored_path)
+
+
+def update_artifact(
+    db: Session, artifact: models.Artifact, data: schemas.ArtifactUpdate
+) -> models.Artifact:
+    for field, value in data.model_dump(exclude_unset=True).items():
+        setattr(artifact, field, value)
+    db.commit()
+    db.refresh(artifact)
+    return artifact
+
+
+def count_artifacts_by_project(db: Session, project_id: int) -> int:
+    stmt = select(func.count(models.Artifact.id)).where(
+        models.Artifact.project_id == project_id
+    )
+    return int(db.scalar(stmt) or 0)
+
+
+def count_artifacts_by_goal(db: Session, goal_id: int) -> int:
+    stmt = select(func.count(models.Artifact.id)).where(
+        models.Artifact.goal_id == goal_id
+    )
+    return int(db.scalar(stmt) or 0)
+
+
+def count_artifacts_by_experiment(db: Session, experiment_id: int) -> int:
+    stmt = select(func.count(models.Artifact.id)).where(
+        models.Artifact.experiment_id == experiment_id
+    )
+    return int(db.scalar(stmt) or 0)
+
+
+# ---------------------------------------------------------------------------
+# WeeklyReview (周复盘)
+# ---------------------------------------------------------------------------
+
+
+def list_weekly_reviews(
+    db: Session, limit: int = 50
+) -> Sequence[models.WeeklyReview]:
+    stmt = (
+        select(models.WeeklyReview)
+        .order_by(models.WeeklyReview.week_start_date.desc())
+        .limit(limit)
+    )
+    return db.scalars(stmt).all()
+
+
+def get_weekly_review(
+    db: Session, review_id: int
+) -> models.WeeklyReview | None:
+    return db.get(models.WeeklyReview, review_id)
+
+
+def create_weekly_review(
+    db: Session, data: schemas.WeeklyReviewCreate
+) -> models.WeeklyReview:
+    review = models.WeeklyReview(
+        week_start_date=data.week_start_date,
+        title=data.title,
+        content=data.content,
+        highlights=data.highlights,
+        blockers=data.blockers,
+        next_focus=data.next_focus,
+    )
+    db.add(review)
+    db.commit()
+    db.refresh(review)
+    return review
+
+
+def update_weekly_review(
+    db: Session,
+    review: models.WeeklyReview,
+    data: schemas.WeeklyReviewUpdate,
+) -> models.WeeklyReview:
+    for field, value in data.model_dump(exclude_unset=True).items():
+        setattr(review, field, value)
+    db.commit()
+    db.refresh(review)
+    return review
+
+
+def delete_weekly_review(db: Session, review: models.WeeklyReview) -> None:
+    db.delete(review)
+    db.commit()
+
+
+# ---------------------------------------------------------------------------
 # Dashboard 聚合
 # ---------------------------------------------------------------------------
 
@@ -423,6 +668,8 @@ def get_project_stats(db: Session, project_id: int) -> dict:
             next_due_exp_id = next_exp.id
             next_due_exp_name = next_exp.name
 
+    artifact_count = count_artifacts_by_project(db, project_id)
+
     return {
         "goal_count": goal_count,
         "exp_count": exp_count,
@@ -431,6 +678,7 @@ def get_project_stats(db: Session, project_id: int) -> dict:
         "earliest_due": earliest_due,
         "next_due_exp_id": next_due_exp_id,
         "next_due_exp_name": next_due_exp_name,
+        "artifact_count": artifact_count,
     }
 
 
@@ -472,7 +720,7 @@ def list_pending_experiments(
 def recent_activity(
     db: Session, limit: int = 10
 ) -> list[dict]:
-    """综合最近活动：实验创建 / 笔记新增 / 指标记录。"""
+    """综合最近活动：实验创建 / 笔记新增 / 指标记录 / 文件上传。"""
     activities: list[dict] = []
 
     # 最新实验
@@ -498,7 +746,6 @@ def recent_activity(
         .order_by(models.Note.created_at.desc())
         .limit(limit)
     ):
-        # 取笔记内容前 50 字
         snippet = note.content.replace("\n", " ")[:50]
         activities.append(
             {
@@ -511,6 +758,24 @@ def recent_activity(
             }
         )
 
+    # 最新上传
+    for art in db.scalars(
+        select(models.Artifact)
+        .order_by(models.Artifact.uploaded_at.desc())
+        .limit(limit)
+    ):
+        activities.append(
+            {
+                "type": "文件",
+                "type_icon": "paperclip",
+                "content": f"上传文件：{art.original_name}",
+                "time": art.uploaded_at,
+                "status": art.kind,
+                "link": f"/artifacts/{art.id}",
+            }
+        )
+
     # 按时间倒序，取前 limit 条
     activities.sort(key=lambda x: x["time"], reverse=True)
     return activities[:limit]
+

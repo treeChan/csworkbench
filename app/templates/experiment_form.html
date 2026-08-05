@@ -72,21 +72,12 @@
         </div>
 
         <div class="form-row">
-            <label>超参数 / 配置 (JSON)</label>
-            <textarea name="config_json" rows="6"
-                      placeholder='{"lr": 0.001, "batch_size": 32}'>{{ config_json }}</textarea>
+            <label>超参数 / 配置 (Markdown)</label>
+            <textarea name="config_md" rows="6"
+                      placeholder="lr: 0.001&#10;batch_size: 32&#10;optimizer: AdamW&#10;...">{{ config_md }}</textarea>
             <small style="color: var(--c-text-soft); font-size: 11.5px;">
-                必须是合法 JSON。留空或填 <code>{}</code> 表示无配置。
+                自由记录即可,支持 Markdown。例如代码块、列表、表格都行。
             </small>
-        </div>
-
-        <!-- ============= 实验结果区 ============= -->
-        <div class="form-section-title">📊 实验结果</div>
-
-        <div class="form-row">
-            <label>结果小结 (Markdown)</label>
-            <textarea name="result_summary" rows="4"
-                      placeholder="最终结论、关键数字、意外发现…">{% if experiment %}{{ experiment.result_summary }}{% endif %}</textarea>
         </div>
 
         <!-- ============= 元数据 ============= -->

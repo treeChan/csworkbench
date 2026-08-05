@@ -1,0 +1,92 @@
+{% extends "base.html" %}
+{% block title %}文件与成果 · Workbench{% endblock %}
+
+{% block content %}
+<div class="breadcrumb">
+    <a href="/projects">研究项目</a>
+    <span class="sep">/</span> 文件与成果
+</div>
+
+<div class="today-header">
+    <h1>📦 文件与成果</h1>
+    <div style="margin-left: auto; display: flex; gap: 8px; align-items: center;">
+        <span style="color: var(--c-text-soft); font-size: 13px;">
+            共 <strong>{{ total_count }}</strong> 个文件 · {{ (total_bytes / 1024 / 1024) | round(2) }} MB
+        </span>
+    </div>
+</div>
+
+<div class="alert" style="background: var(--c-primary-bg); color: var(--c-primary); border-left: 3px solid var(--c-primary); font-size: 13px;">
+    所有上传的文件都按 <strong>项目 → 大目标 → 实验</strong> 三级归属。
+    可以从这里下载原文件、跳转回所属位置，或者删除。
+</div>
+
+<!-- 按归属分组展示 -->
+{% for kind, label, icon in [
+    ('project',   '项目级',     '📁'),
+    ('goal',      '大目标级',   '🎯'),
+    ('experiment','实验级',     '🧪'),
+] %}
+<div class="card">
+    <h3 class="card-title">{{ icon }} {{ label }}（{{ grouped[kind]|length }} 个）</h3>
+
+    {% if grouped[kind] %}
+    <div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 12px;">
+        {% for a in grouped[kind] %}
+        <div style="border: 1px solid var(--c-border); border-radius: var(--radius-md); padding: 10px; background: var(--c-bg-soft);">
+            <div style="display: flex; align-items: center; gap: 6px; margin-bottom: 4px;">
+                {% if a.kind == 'image' %}<span>🖼️</span>
+                {% elif a.kind == 'model' %}<span>🧠</span>
+                {% else %}<span>📄</span>{% endif %}
+                <a href="/api/artifacts/{{ a.id }}/download"
+                   style="font-weight: 500; word-break: break-all;">{{ a.original_name }}</a>
+            </div>
+            <div style="font-size: 11.5px; color: var(--c-text-soft); margin-bottom: 6px;">
+                {{ a.kind }} · {{ (a.size_bytes / 1024) | round(1) }} KB · {{ a.uploaded_at | fmt_dt }}
+            </div>
+            <div style="font-size: 12px; color: var(--c-text-soft); margin-bottom: 6px;">
+                所属:
+                {% if a.project_id %}
+                    {% set proj = projects.get(a.project_id) %}
+                    <a href="/projects/{{ a.project_id }}" style="color: var(--c-primary);">{{ proj.name if proj else '?' }}</a>
+                {% elif a.goal_id %}
+                    {% set g = goals.get(a.goal_id) %}
+                    {% if g %}<a href="/projects/{{ g.project_id }}" style="color: var(--c-primary);">{{ g.name }}</a>{% else %}?{% endif %}
+                {% elif a.experiment_id %}
+                    <a href="/experiments/{{ a.experiment_id }}" style="color: var(--c-primary);">实验 #{{ a.experiment_id }}</a>
+                {% endif %}
+            </div>
+            {% if a.description %}
+            <div class="md" style="font-size: 12px;">{{ a.description | markdown | safe }}</div>
+            {% endif %}
+            <div style="text-align: right; margin-top: 6px;">
+                <form method="post" action="/artifacts/{{ a.id }}/delete" style="display:inline;">
+                    <button type="submit" class="btn btn-outline" style="padding: 1px 6px; font-size: 11px;"
+                            onclick="return confirm('确定删除这个文件？磁盘上的文件也会一起删掉。');">删除</button>
+                </form>
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+    {% else %}
+    <p style="color: var(--c-text-soft); font-size: 13px; padding: 8px 0;">
+        {{ '还没有项目级文件' if kind == 'project'
+           else ('还没有大目标级文件' if kind == 'goal'
+           else '还没有实验级文件（实验里的附件就去上传结果页加）') }}
+    </p>
+    {% endif %}
+</div>
+{% endfor %}
+
+{% if total_count == 0 %}
+<div class="card" style="text-align: center; padding: 40px;">
+    <p style="color: var(--c-text-soft); font-size: 14px;">
+        还没有任何上传的文件。
+    </p>
+    <p style="color: var(--c-text-faint); font-size: 12px;">
+        在「研究项目」或某个「实验的上传结果页」里都能上传。
+    </p>
+</div>
+{% endif %}
+
+{% endblock %}

@@ -6,8 +6,7 @@ ORM 模型用于数据库；Pydantic 模型用于对外（API、表单）。
 
 from __future__ import annotations
 
-from datetime import datetime
-from typing import Any
+from datetime import date, datetime
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -42,6 +41,7 @@ class ProjectRead(ProjectBase):
     created_at: datetime
     updated_at: datetime
     experiment_count: int = 0
+    artifact_count: int = 0
 
     model_config = ConfigDict(from_attributes=True)
 
@@ -73,6 +73,7 @@ class GoalRead(GoalBase):
     created_at: datetime
     updated_at: datetime
     experiment_count: int = 0
+    artifact_count: int = 0
 
     model_config = ConfigDict(from_attributes=True)
 
@@ -88,7 +89,8 @@ class ExperimentBase(BaseModel):
     hypothesis: str = ""
     design_notes: str = ""
     result_summary: str = ""
-    config: dict[str, Any] = Field(default_factory=dict)
+    # 2026-08-05: 原来是 config (JSON dict),因为主要是为了人记录,改成 Markdown 文字
+    config_md: str = ""
     due_date: str | None = None  # ISO 日期字符串
     git_commit: str | None = None
     goal_id: int
@@ -104,7 +106,7 @@ class ExperimentUpdate(BaseModel):
     hypothesis: str | None = None
     design_notes: str | None = None
     result_summary: str | None = None
-    config: dict[str, Any] | None = None
+    config_md: str | None = None
     due_date: str | None = None
     git_commit: str | None = None
     goal_id: int | None = None
@@ -117,6 +119,7 @@ class ExperimentRead(ExperimentBase):
     updated_at: datetime
     metric_count: int = 0
     note_count: int = 0
+    artifact_count: int = 0
 
     model_config = ConfigDict(from_attributes=True)
 
@@ -129,6 +132,9 @@ class ExperimentRead(ExperimentBase):
 class MetricCreate(BaseModel):
     key: str = Field(..., min_length=1, max_length=100)
     value: float
+    # 2026-08-05: 加 note 字段,记录这一行的上下文("这轮改了 lr=0.001" 之类)
+    # step 保留兼容(以前可能填过),但 2026-08-05 后不再用来画曲线
+    note: str = ""
     step: int | None = None
 
 
@@ -137,6 +143,7 @@ class MetricRead(BaseModel):
     experiment_id: int
     key: str
     value: float
+    note: str = ""
     step: int | None
     timestamp: datetime
 
@@ -183,5 +190,78 @@ class DecisionRead(BaseModel):
     status: str
     created_at: datetime
     resolved_at: datetime | None
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+# ---------------------------------------------------------------------------
+# Artifact (文件与成果：图片、模型权重、其他附件)
+# ---------------------------------------------------------------------------
+
+
+class ArtifactBase(BaseModel):
+    description: str = ""
+
+
+class ArtifactCreate(ArtifactBase):
+    """API 接收 multipart 上传后,路由层把文件存到磁盘后调用此 schema
+    只包含 description(文件名、字节数等元数据从文件对象提取)。"""
+
+    project_id: int | None = None
+    goal_id: int | None = None
+    experiment_id: int | None = None
+
+
+class ArtifactUpdate(BaseModel):
+    description: str | None = None
+    kind: str | None = None  # 允许改 image/model/other
+
+
+class ArtifactRead(BaseModel):
+    id: int
+    project_id: int | None
+    goal_id: int | None
+    experiment_id: int | None
+    original_name: str
+    kind: str
+    mime_type: str
+    size_bytes: int
+    description: str
+    uploaded_at: datetime
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+# ---------------------------------------------------------------------------
+# WeeklyReview (周复盘)
+# ---------------------------------------------------------------------------
+
+
+class WeeklyReviewBase(BaseModel):
+    week_start_date: date  # 这一周的开始日期（周一）
+    title: str = ""
+    content: str = ""
+    highlights: str = ""
+    blockers: str = ""
+    next_focus: str = ""
+
+
+class WeeklyReviewCreate(WeeklyReviewBase):
+    pass
+
+
+class WeeklyReviewUpdate(BaseModel):
+    week_start_date: date | None = None
+    title: str | None = None
+    content: str | None = None
+    highlights: str | None = None
+    blockers: str | None = None
+    next_focus: str | None = None
+
+
+class WeeklyReviewRead(WeeklyReviewBase):
+    id: int
+    created_at: datetime
+    updated_at: datetime
 
     model_config = ConfigDict(from_attributes=True)

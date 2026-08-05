@@ -1,0 +1,68 @@
+{% extends "base.html" %}
+{% block title %}{{ review.title or '周复盘' }}{% endblock %}
+
+{% block content %}
+<div class="breadcrumb">
+    <a href="/">首页</a>
+    <span class="sep">/</span>
+    <a href="/review">周复盘</a>
+    <span class="sep">/</span> {{ review.week_start_date.isoformat() }}
+</div>
+
+<div class="today-header">
+    <h1>
+        📅 {{ review.title or ('第 ' + review.week_start_date.isocalendar()[1]|string + ' 周') }}
+    </h1>
+    <div style="margin-left: auto; display: flex; gap: 8px;">
+        <a href="/review/{{ review.id }}/edit" class="btn btn-outline">✏️ 编辑</a>
+        <form method="post" action="/review/{{ review.id }}/delete"
+              onsubmit="return confirm('确定删除这篇周复盘？')" style="display:inline;">
+            <button type="submit" class="btn btn-outline">🗑 删除</button>
+        </form>
+    </div>
+</div>
+
+<div class="card" style="margin-bottom: 12px; font-size: 12.5px; color: var(--c-text-soft);">
+    起始：{{ review.week_start_date.isoformat() }}
+    · 创建：{{ review.created_at | fmt_dt }}
+    · 更新：{{ review.updated_at | fmt_dt }}
+</div>
+
+{% if review.highlights %}
+<div class="card">
+    <h3 class="card-title">🌟 本周高光</h3>
+    <div class="md">{{ review.highlights | markdown | safe }}</div>
+</div>
+{% endif %}
+
+{% if review.blockers %}
+<div class="card">
+    <h3 class="card-title">🚧 卡点 / 待解决</h3>
+    <div class="md">{{ review.blockers | markdown | safe }}</div>
+</div>
+{% endif %}
+
+{% if review.next_focus %}
+<div class="card">
+    <h3 class="card-title">🎯 下周重点</h3>
+    <div class="md">{{ review.next_focus | markdown | safe }}</div>
+</div>
+{% endif %}
+
+{% if review.content %}
+<div class="card">
+    <h3 class="card-title">📄 详细内容</h3>
+    <div class="md">{{ review.content | markdown | safe }}</div>
+</div>
+{% endif %}
+
+{% if not (review.highlights or review.blockers or review.next_focus or review.content) %}
+<div class="card" style="text-align: center; padding: 40px;">
+    <p style="color: var(--c-text-soft); font-size: 14px;">
+        这篇复盘还是空的。
+    </p>
+    <a href="/review/{{ review.id }}/edit" class="btn btn-primary">✏️ 去填写</a>
+</div>
+{% endif %}
+
+{% endblock %}

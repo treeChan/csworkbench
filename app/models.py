@@ -11,9 +11,8 @@
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Any
 
-from sqlalchemy import JSON, Date, DateTime, Float, ForeignKey, Integer, String, Text
+from sqlalchemy import Date, DateTime, Float, ForeignKey, Integer, String, Text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.database import Base
@@ -73,6 +72,12 @@ class Project(Base):
         cascade="all, delete-orphan",
         order_by="Decision.created_at.desc()",
     )
+    artifacts: Mapped[list["Artifact"]] = relationship(
+        "Artifact",
+        back_populates="project",
+        cascade="all, delete-orphan",
+        order_by="Artifact.uploaded_at.desc()",
+    )
 
     def __repr__(self) -> str:
         return f"<Project id={self.id} name={self.name!r}>"
@@ -122,6 +127,12 @@ class Goal(Base):
         cascade="all, delete-orphan",  # 删目标时连实验一起删
         order_by="Experiment.created_at.asc()",
     )
+    artifacts: Mapped[list["Artifact"]] = relationship(
+        "Artifact",
+        back_populates="goal",
+        cascade="all, delete-orphan",
+        order_by="Artifact.uploaded_at.desc()",
+    )
 
     def __repr__(self) -> str:
         return f"<Goal id={self.id} name={self.name!r}>"
@@ -144,7 +155,7 @@ class Experiment(Base):
         hypothesis: 实验设计意图 / 想达到什么
         design_notes: 实验设计备注（参数选择依据、方案等）
         result_summary: 实验结果小结（Markdown）
-        config: 超参数 / 配置（JSON，灵活存储）
+        config_md: 超参数 / 配置（Markdown 原文，方便人记;之前是 JSON,2026-08-05 改）
         status: draft / running / completed / failed
         git_commit: 可选的当前 commit hash
     """
@@ -165,8 +176,9 @@ class Experiment(Base):
     design_notes: Mapped[str] = mapped_column(Text, default="")
     result_summary: Mapped[str] = mapped_column(Text, default="")
 
-    # JSON 列：存任意嵌套配置
-    config: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict)
+    # 超参数 / 配置记录。原本是 JSON dict,2026-08-05 改成 Markdown 文字:
+    # 因为主要是为了人记录,JSON 既难写又难读,而且训练脚本自己有自己的配置管理。
+    config_md: Mapped[str] = mapped_column(Text, default="")
 
     status: Mapped[str] = mapped_column(String(20), default="draft")
     priority: Mapped[str] = mapped_column(String(10), default="中")  # 高/中/低
@@ -184,13 +196,19 @@ class Experiment(Base):
         "Metric",
         back_populates="experiment",
         cascade="all, delete-orphan",
-        order_by="Metric.step",  # 默认按 step 排序
+        order_by="Metric.timestamp.asc(), Metric.id.asc()",  # 按记录时间排序,不再按 step
     )
     notes: Mapped[list["Note"]] = relationship(
         "Note",
         back_populates="experiment",
         cascade="all, delete-orphan",
         order_by="Note.created_at.desc()",  # 最新在前
+    )
+    artifacts: Mapped[list["Artifact"]] = relationship(
+        "Artifact",
+        back_populates="experiment",
+        cascade="all, delete-orphan",
+        order_by="Artifact.uploaded_at.desc()",
     )
 
     def __repr__(self) -> str:
@@ -208,9 +226,11 @@ class Metric(Base):
     字段：
         id: 主键
         experiment_id: 所属实验
-        key: 指标名（如 "loss"、"accuracy"）
+        key: 指标名（如 "loss"、"accuracy"、"psnr_db"）
         value: 数值
-        step: 训练步数 / epoch，可空
+        note: 可选的备注 / 上下文（这一轮调了什么,跑的是哪个子集）
+        step: 训练步数 / epoch，可空（保留兼容,但 2026-08-05 后不再画曲线）
+        timestamp: 记录时刻
     """
 
     __tablename__ = "metrics"
@@ -222,6 +242,7 @@ class Metric(Base):
     )
     key: Mapped[str] = mapped_column(String(100), index=True)
     value: Mapped[float] = mapped_column(Float)
+    note: Mapped[str] = mapped_column(Text, default="")
     step: Mapped[int | None] = mapped_column(Integer, nullable=True)
 
     timestamp: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
@@ -229,7 +250,7 @@ class Metric(Base):
     experiment: Mapped[Experiment] = relationship("Experiment", back_populates="metrics")
 
     def __repr__(self) -> str:
-        return f"<Metric {self.key}={self.value} step={self.step}>"
+        return f"<Metric {self.key}={self.value}>"
 
 
 # ---------------------------------------------------------------------------
@@ -295,3 +316,101 @@ class Decision(Base):
 
     def __repr__(self) -> str:
         return f"<Decision id={self.id} status={self.status}>"
+
+
+# ---------------------------------------------------------------------------
+# 文件与成果（图片、模型权重、其它附件）
+# ---------------------------------------------------------------------------
+
+
+class Artifact(Base):
+    """统一存放上传的文件：图片（结果图、示意图）、模型权重（.pt 等）、
+    以及任意附件。
+
+    归属：必属于 Project / Goal / Experiment 中的**恰好一个**。
+    由路由层校验(数据库 SQLite 对 CHECK 支持有限,用应用层 + 三个独立 nullable FK)。
+
+    字段：
+        id: 主键
+        project_id / goal_id / experiment_id: 三选一必填
+        original_name: 用户上传时的文件名（展示用）
+        stored_name: 实际存在磁盘上的唯一文件名（避免冲突和路径注入）
+        stored_path: 相对于 artifact_dir 的路径,例如 'projects/3/img_xxx.png'
+        kind: image / model / other
+        mime_type: 浏览器给的 MIME,例如 'image/png'、'application/octet-stream'
+        size_bytes: 文件大小
+        description: Markdown 备注（这张图说明了什么 / 这个权重是哪次训练出的）
+        uploaded_at: 上传时间
+    """
+
+    __tablename__ = "artifacts"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+
+    project_id: Mapped[int | None] = mapped_column(
+        ForeignKey("projects.id", ondelete="CASCADE"), index=True, nullable=True
+    )
+    goal_id: Mapped[int | None] = mapped_column(
+        ForeignKey("goals.id", ondelete="CASCADE"), index=True, nullable=True
+    )
+    experiment_id: Mapped[int | None] = mapped_column(
+        ForeignKey("experiments.id", ondelete="CASCADE"), index=True, nullable=True
+    )
+
+    original_name: Mapped[str] = mapped_column(String(255))
+    stored_name: Mapped[str] = mapped_column(String(255), index=True)
+    stored_path: Mapped[str] = mapped_column(String(500))
+    kind: Mapped[str] = mapped_column(String(20), default="other")  # image/model/other
+    mime_type: Mapped[str] = mapped_column(String(100), default="application/octet-stream")
+    size_bytes: Mapped[int] = mapped_column(Integer, default=0)
+    description: Mapped[str] = mapped_column(Text, default="")
+
+    uploaded_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+
+    project: Mapped["Project | None"] = relationship("Project", back_populates="artifacts")
+    goal: Mapped["Goal | None"] = relationship("Goal", back_populates="artifacts")
+    experiment: Mapped["Experiment | None"] = relationship(
+        "Experiment", back_populates="artifacts"
+    )
+
+    def __repr__(self) -> str:
+        return f"<Artifact id={self.id} kind={self.kind!r} name={self.original_name!r}>"
+
+
+# ---------------------------------------------------------------------------
+# 周复盘
+# ---------------------------------------------------------------------------
+
+
+class WeeklyReview(Base):
+    """每周一次的复盘笔记。
+
+    字段：
+        id: 主键
+        week_start_date: 这一周的开始日期（周一），用 date 类型存
+        title: 标题（默认 "第 N 周 (YYYY-MM-DD ~ YYYY-MM-DD)"，可手改）
+        content: 主体（Markdown，记录这一周干了啥）
+        highlights: 这一周的高光（Markdown，简短列表）
+        blockers: 遇到的卡点 / 待解决（Markdown）
+        next_focus: 下周重点（Markdown）
+        created_at / updated_at: UTC 时间
+    """
+
+    __tablename__ = "weekly_reviews"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+
+    week_start_date: Mapped[datetime] = mapped_column(Date, index=True)
+    title: Mapped[str] = mapped_column(String(200), default="")
+    content: Mapped[str] = mapped_column(Text, default="")
+    highlights: Mapped[str] = mapped_column(Text, default="")
+    blockers: Mapped[str] = mapped_column(Text, default="")
+    next_focus: Mapped[str] = mapped_column(Text, default="")
+
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime, default=datetime.utcnow, onupdate=datetime.utcnow
+    )
+
+    def __repr__(self) -> str:
+        return f"<WeeklyReview id={self.id} week_start={self.week_start_date}>"

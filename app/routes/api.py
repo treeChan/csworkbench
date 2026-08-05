@@ -13,21 +13,27 @@
     )
     eid = r.json()["id"]
 
-    for step, loss in enumerate(losses):
-        requests.post(
-            f"http://localhost:8000/api/experiments/{eid}/metrics",
-            json={"key": "loss", "value": loss, "step": step},
-        )
+    requests.post(
+        f"http://localhost:8000/api/experiments/{eid}/metrics",
+        json={"key": "loss", "value": loss, "note": "epoch 1"},
+    )
 
 所有路由都返回标准 JSON。
 """
 
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, HTTPException
+import csv
+import io
+import zipfile
+from datetime import datetime
+
+from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
+from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 
 from app import crud, schemas
+from app.config import get_artifact_dir, settings
 from app.database import get_db
 
 router = APIRouter(prefix="/api", tags=["api"])
@@ -41,7 +47,6 @@ router = APIRouter(prefix="/api", tags=["api"])
 @router.get("/projects", response_model=list[schemas.ProjectRead])
 def api_list_projects(db: Session = Depends(get_db)):
     projects = crud.list_projects(db)
-    # 加上 experiment_count
     return [
         schemas.ProjectRead(
             id=p.id,
@@ -52,6 +57,7 @@ def api_list_projects(db: Session = Depends(get_db)):
             created_at=p.created_at,
             updated_at=p.updated_at,
             experiment_count=crud.count_experiments(db, p.id),
+            artifact_count=crud.count_artifacts_by_project(db, p.id),
         )
         for p in projects
     ]
@@ -73,6 +79,7 @@ def api_create_project(
         created_at=project.created_at,
         updated_at=project.updated_at,
         experiment_count=0,
+        artifact_count=0,
     )
 
 
@@ -90,6 +97,7 @@ def api_get_project(project_id: int, db: Session = Depends(get_db)):
         created_at=project.created_at,
         updated_at=project.updated_at,
         experiment_count=crud.count_experiments(db, project_id),
+        artifact_count=crud.count_artifacts_by_project(db, project_id),
     )
 
 
@@ -112,6 +120,7 @@ def api_update_project(
         created_at=project.created_at,
         updated_at=project.updated_at,
         experiment_count=crud.count_experiments(db, project_id),
+        artifact_count=crud.count_artifacts_by_project(db, project_id),
     )
 
 
@@ -207,7 +216,7 @@ def api_delete_goal(goal_id: int, db: Session = Depends(get_db)):
 # ---------------------------------------------------------------------------
 
 
-def _exp_to_read(exp, metric_count: int = 0, note_count: int = 0) -> schemas.ExperimentRead:
+def _exp_to_read(exp, metric_count: int = 0, note_count: int = 0, artifact_count: int = 0) -> schemas.ExperimentRead:
     return schemas.ExperimentRead(
         id=exp.id,
         project_id=exp.project_id,
@@ -217,7 +226,7 @@ def _exp_to_read(exp, metric_count: int = 0, note_count: int = 0) -> schemas.Exp
         hypothesis=exp.hypothesis,
         design_notes=exp.design_notes,
         result_summary=exp.result_summary,
-        config=exp.config,
+        config_md=exp.config_md,
         status=exp.status,
         priority=exp.priority,
         due_date=exp.due_date.isoformat() if exp.due_date else None,
@@ -226,6 +235,7 @@ def _exp_to_read(exp, metric_count: int = 0, note_count: int = 0) -> schemas.Exp
         updated_at=exp.updated_at,
         metric_count=metric_count,
         note_count=note_count,
+        artifact_count=artifact_count,
     )
 
 
@@ -242,6 +252,7 @@ def api_list_experiments(project_id: int, db: Session = Depends(get_db)):
             e,
             metric_count=crud.count_metrics(db, e.id),
             note_count=crud.count_notes(db, e.id),
+            artifact_count=crud.count_artifacts_by_experiment(db, e.id),
         )
         for e in exps
     ]
@@ -276,6 +287,7 @@ def api_get_experiment(experiment_id: int, db: Session = Depends(get_db)):
         exp,
         metric_count=crud.count_metrics(db, exp.id),
         note_count=crud.count_notes(db, exp.id),
+        artifact_count=crud.count_artifacts_by_experiment(db, exp.id),
     )
 
 
@@ -437,3 +449,370 @@ def api_delete_decision(decision_id: int, db: Session = Depends(get_db)):
     if dec is None:
         raise HTTPException(404, "Decision not found")
     crud.delete_decision(db, dec)
+
+
+# ---------------------------------------------------------------------------
+# Artifacts (文件与成果)
+# ---------------------------------------------------------------------------
+
+
+def _artifact_max_bytes() -> int:
+    return settings.max_upload_size_mb * 1024 * 1024
+
+
+@router.post(
+    "/projects/{project_id}/artifacts",
+    response_model=schemas.ArtifactRead,
+    status_code=201,
+)
+async def api_upload_project_artifact(
+    project_id: int,
+    file: UploadFile = File(...),
+    description: str = Form(""),
+    db: Session = Depends(get_db),
+):
+    if crud.get_project(db, project_id) is None:
+        raise HTTPException(404, "Project not found")
+    return await _do_artifact_upload(db, file, description, "project", project_id)
+
+
+@router.post(
+    "/goals/{goal_id}/artifacts",
+    response_model=schemas.ArtifactRead,
+    status_code=201,
+)
+async def api_upload_goal_artifact(
+    goal_id: int,
+    file: UploadFile = File(...),
+    description: str = Form(""),
+    db: Session = Depends(get_db),
+):
+    if crud.get_goal(db, goal_id) is None:
+        raise HTTPException(404, "Goal not found")
+    return await _do_artifact_upload(db, file, description, "goal", goal_id)
+
+
+@router.post(
+    "/experiments/{experiment_id}/artifacts",
+    response_model=schemas.ArtifactRead,
+    status_code=201,
+)
+async def api_upload_experiment_artifact(
+    experiment_id: int,
+    file: UploadFile = File(...),
+    description: str = Form(""),
+    db: Session = Depends(get_db),
+):
+    if crud.get_experiment(db, experiment_id) is None:
+        raise HTTPException(404, "Experiment not found")
+    return await _do_artifact_upload(db, file, description, "experiment", experiment_id)
+
+
+async def _do_artifact_upload(
+    db: Session, file: UploadFile, description: str, owner_kind: str, owner_id: int
+):
+    """共用的上传实现(三种归属走同一份代码)。"""
+    # 大小限制
+    content = await file.read()
+    if len(content) > _artifact_max_bytes():
+        raise HTTPException(
+            413,
+            f"文件超过 {settings.max_upload_size_mb} MB 上限",
+        )
+    # 把字节塞回去让 crud 处理
+    import io as _io
+    file.file = _io.BytesIO(content)
+    artifact = crud.create_artifact(
+        db,
+        file,
+        owner_kind=owner_kind,
+        owner_id=owner_id,
+        description=description,
+    )
+    return artifact
+
+
+@router.get("/artifacts", response_model=list[schemas.ArtifactRead])
+def api_list_artifacts(
+    project_id: int | None = None,
+    goal_id: int | None = None,
+    experiment_id: int | None = None,
+    kind: str | None = None,
+    db: Session = Depends(get_db),
+):
+    return crud.list_artifacts(
+        db,
+        project_id=project_id,
+        goal_id=goal_id,
+        experiment_id=experiment_id,
+        kind=kind,
+    )
+
+
+@router.get("/artifacts/{artifact_id}", response_model=schemas.ArtifactRead)
+def api_get_artifact(artifact_id: int, db: Session = Depends(get_db)):
+    art = crud.get_artifact(db, artifact_id)
+    if art is None:
+        raise HTTPException(404, "Artifact not found")
+    return art
+
+
+@router.patch("/artifacts/{artifact_id}", response_model=schemas.ArtifactRead)
+def api_update_artifact(
+    artifact_id: int,
+    data: schemas.ArtifactUpdate,
+    db: Session = Depends(get_db),
+):
+    art = crud.get_artifact(db, artifact_id)
+    if art is None:
+        raise HTTPException(404, "Artifact not found")
+    crud.update_artifact(db, art, data)
+    return art
+
+
+@router.get("/artifacts/{artifact_id}/download")
+def api_download_artifact(artifact_id: int, db: Session = Depends(get_db)):
+    art = crud.get_artifact(db, artifact_id)
+    if art is None:
+        raise HTTPException(404, "Artifact not found")
+    path = get_artifact_dir() / art.stored_path
+    if not path.is_file():
+        raise HTTPException(410, "文件已丢失（磁盘上找不到）")
+    from fastapi.responses import FileResponse
+    return FileResponse(
+        path=str(path),
+        filename=art.original_name,
+        media_type=art.mime_type or "application/octet-stream",
+    )
+
+
+@router.delete("/artifacts/{artifact_id}", status_code=204)
+def api_delete_artifact(artifact_id: int, db: Session = Depends(get_db)):
+    art = crud.get_artifact(db, artifact_id)
+    if art is None:
+        raise HTTPException(404, "Artifact not found")
+    crud.delete_artifact(db, art)
+
+
+# ---------------------------------------------------------------------------
+# Weekly Reviews (周复盘)
+# ---------------------------------------------------------------------------
+
+
+@router.get("/weekly-reviews", response_model=list[schemas.WeeklyReviewRead])
+def api_list_weekly_reviews(
+    limit: int = 50, db: Session = Depends(get_db)
+):
+    return crud.list_weekly_reviews(db, limit=limit)
+
+
+@router.post(
+    "/weekly-reviews",
+    response_model=schemas.WeeklyReviewRead,
+    status_code=201,
+)
+def api_create_weekly_review(
+    data: schemas.WeeklyReviewCreate,
+    db: Session = Depends(get_db),
+):
+    return crud.create_weekly_review(db, data)
+
+
+@router.get(
+    "/weekly-reviews/{review_id}",
+    response_model=schemas.WeeklyReviewRead,
+)
+def api_get_weekly_review(review_id: int, db: Session = Depends(get_db)):
+    r = crud.get_weekly_review(db, review_id)
+    if r is None:
+        raise HTTPException(404, "WeeklyReview not found")
+    return r
+
+
+@router.patch(
+    "/weekly-reviews/{review_id}",
+    response_model=schemas.WeeklyReviewRead,
+)
+def api_update_weekly_review(
+    review_id: int,
+    data: schemas.WeeklyReviewUpdate,
+    db: Session = Depends(get_db),
+):
+    r = crud.get_weekly_review(db, review_id)
+    if r is None:
+        raise HTTPException(404, "WeeklyReview not found")
+    crud.update_weekly_review(db, r, data)
+    return r
+
+
+@router.delete("/weekly-reviews/{review_id}", status_code=204)
+def api_delete_weekly_review(review_id: int, db: Session = Depends(get_db)):
+    r = crud.get_weekly_review(db, review_id)
+    if r is None:
+        raise HTTPException(404, "WeeklyReview not found")
+    crud.delete_weekly_review(db, r)
+
+
+# ---------------------------------------------------------------------------
+# Experiment Export (一键导出 ZIP)
+# ---------------------------------------------------------------------------
+
+
+def _experiment_markdown(exp, project, goal, metrics, notes, artifacts) -> str:
+    """把实验拼成一份 Markdown,放进 zip。"""
+    lines: list[str] = []
+    lines.append(f"# 实验：{exp.name}")
+    lines.append("")
+    lines.append(f"- 项目：**{project.name}**")
+    if goal is not None:
+        lines.append(f"- 大目标：**{goal.name}**")
+    lines.append(f"- 创建：{exp.created_at.isoformat(timespec='seconds')} UTC")
+    lines.append(f"- 更新：{exp.updated_at.isoformat(timespec='seconds')} UTC")
+    if exp.due_date:
+        lines.append(f"- 截止：{exp.due_date.isoformat()}")
+    if exp.git_commit:
+        lines.append(f"- Commit：`{exp.git_commit}`")
+    lines.append(f"- 状态：{exp.status}")
+    lines.append("")
+
+    if exp.description:
+        lines.append("## 简介")
+        lines.append(exp.description)
+        lines.append("")
+
+    if exp.hypothesis:
+        lines.append("## 假设")
+        lines.append(exp.hypothesis)
+        lines.append("")
+
+    if exp.config_md:
+        lines.append("## 配置 / 超参数")
+        lines.append(exp.config_md)
+        lines.append("")
+
+    if exp.design_notes:
+        lines.append("## 设计备注")
+        lines.append(exp.design_notes)
+        lines.append("")
+
+    if exp.result_summary:
+        lines.append("## 结果小结")
+        lines.append(exp.result_summary)
+        lines.append("")
+
+    if metrics:
+        lines.append("## 指标")
+        lines.append("")
+        lines.append("| key | value | step | note | 时间 |")
+        lines.append("|---|---|---|---|---|")
+        for m in metrics:
+            lines.append(
+                f"| {m.key} | {m.value} | {m.step if m.step is not None else ''} "
+                f"| {m.note} | {m.timestamp.isoformat(timespec='seconds')} |"
+            )
+        lines.append("")
+
+    if notes:
+        lines.append("## 笔记")
+        for n in notes:
+            lines.append("")
+            lines.append(f"### {n.created_at.isoformat(timespec='seconds')}")
+            lines.append(n.content)
+
+    if artifacts:
+        lines.append("")
+        lines.append("## 文件与成果")
+        for a in artifacts:
+            lines.append(
+                f"- {a.kind}: `{a.original_name}` ({a.size_bytes} bytes)"
+            )
+
+    return "\n".join(lines)
+
+
+def _metrics_csv(metrics) -> bytes:
+    """UTF-8 BOM + CSV,Excel 直接打开不乱码。"""
+    buf = io.StringIO()
+    buf.write("﻿")  # BOM
+    writer = csv.writer(buf)
+    writer.writerow(["key", "value", "step", "note", "timestamp"])
+    for m in metrics:
+        writer.writerow([
+            m.key,
+            m.value,
+            m.step if m.step is not None else "",
+            m.note,
+            m.timestamp.isoformat(timespec="seconds"),
+        ])
+    return buf.getvalue().encode("utf-8")
+
+
+@router.get("/experiments/{experiment_id}/export")
+def api_export_experiment(experiment_id: int, db: Session = Depends(get_db)):
+    """把单个实验的全部内容打包成 ZIP 下载。
+
+    目录结构:
+        experiment.md      整篇可读的实验 Markdown
+        metrics.csv        所有指标
+        notes/
+            0001.md ...    每条笔记一篇(可选,如果只有一条就走 notes.md)
+        artifacts/
+            xxx.png        图片和 .pt 都在这
+    """
+    exp = crud.get_experiment(db, experiment_id)
+    if exp is None:
+        raise HTTPException(404, "Experiment not found")
+    project = crud.get_project(db, exp.project_id)
+    goal = crud.get_goal(db, exp.goal_id) if exp.goal_id else None
+    metrics = crud.list_metrics(db, exp.id)
+    notes = crud.list_notes(db, exp.id)
+    artifacts = crud.list_artifacts(db, experiment_id=exp.id)
+
+    md_text = _experiment_markdown(exp, project, goal, metrics, notes, artifacts)
+    csv_bytes = _metrics_csv(metrics)
+
+    artifact_root = get_artifact_dir()
+
+    zip_buf = io.BytesIO()
+    with zipfile.ZipFile(zip_buf, "w", zipfile.ZIP_DEFLATED) as zf:
+        zf.writestr("experiment.md", md_text)
+        zf.writestr("metrics.csv", csv_bytes)
+        if notes:
+            # 一条笔记就 notes.md,多条就 notes/0001.md ... 风格
+            if len(notes) == 1:
+                zf.writestr(f"notes.md", notes[0].content)
+            else:
+                for i, n in enumerate(notes, start=1):
+                    fname = f"notes/{i:04d}.md"
+                    zf.writestr(fname, n.content)
+        for a in artifacts:
+            src = artifact_root / a.stored_path
+            if src.is_file():
+                zf.write(src, arcname=f"artifacts/{a.original_name}")
+            else:
+                # 文件已丢,塞个占位说明
+                zf.writestr(
+                    f"artifacts/_missing_{a.id}.txt",
+                    f"文件 {a.original_name} 在磁盘上已找不到。",
+                )
+
+    zip_buf.seek(0)
+    # 文件名走 RFC 5987 编码:英文字段填 ASCII 兜底,中文走 filename* (UTF-8)
+    # 否则浏览器收到 Content-Disposition: attachment; filename="中文.zip" 会乱码
+    # 或被部分 HTTP 库直接拒绝(latin-1 编不了中文)。
+    safe_name = exp.name.replace("/", "_").replace("\\", "_")
+    ascii_fallback = "".join(c if ord(c) < 128 else "_" for c in safe_name)
+    fname = f"{safe_name}-export-{datetime.utcnow().strftime('%Y%m%d')}.zip"
+    fallback = f"{ascii_fallback or 'experiment'}-export-{datetime.utcnow().strftime('%Y%m%d')}.zip"
+    import urllib.parse
+    quoted = urllib.parse.quote(fname)
+    return StreamingResponse(
+        zip_buf,
+        media_type="application/zip",
+        headers={
+            "Content-Disposition": (
+                f'attachment; filename="{fallback}"; '
+                f"filename*=UTF-8''{quoted}"
+            )
+        },
+    )

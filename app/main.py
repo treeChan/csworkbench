@@ -21,8 +21,11 @@ from app.routes import pages as page_routes
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    """应用启动时初始化数据库。"""
+    """应用启动时初始化数据库与上传目录。"""
     init_db()
+    # 顺便把 artifact 目录建好,这样即使没人上传过文件,目录也已经存在
+    from app.config import get_artifact_dir
+    get_artifact_dir()
     yield
 
 

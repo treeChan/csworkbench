@@ -111,9 +111,11 @@ run.bat --data D:/科研数据                   # Windows
 | 项目列表 | `/projects` | 卡片式，可新建和删除 |
 | 项目详情 | `/projects/{id}` | 大目标 + 实验表 + 决策日志 + 阶段切换 |
 | 实验详情 | `/experiments/{id}` | 分「📐 设计」和「📊 结果」两块 |
-| 上传结果 | `/experiments/{id}/results` | 实验做完后单独填结果、指标、笔记 |
+| 上传结果 | `/experiments/{id}/results` | 实验做完后填结果小结、加指标记录（**不画曲线**）、上传图片 / .pt 权重、写笔记 |
+| 文件与成果 | `/files` | 所有上传的文件，按 项目 / 大目标 / 实验 三级归属统一管理 |
+| 周复盘 | `/review` | 每周一篇：高光、卡点、下周重点 |
 
-`/cases`、`/files`、`/review`、`/settings` 目前还是占位页，没有实现。
+`/cases` 和 `/settings` 还是占位页。
 
 ### 典型流程
 
@@ -141,13 +143,19 @@ from scripts.example_log import ensure_project, ensure_goal, create_experiment, 
 proj = ensure_project("声学成像")
 goal = ensure_goal(proj["id"], "2D 角谱反演验证")
 exp  = create_experiment(proj["id"], goal_id=goal["id"], name="v1",
-                         config={"lr": 0.001}, hypothesis="...")
+                         hypothesis="...")
 
 for step, loss in enumerate(losses):
-    log_metric(exp["id"], "loss", loss, step=step)
+    log_metric(exp["id"], "loss", loss, note=f"epoch {step}", step=step)
 ```
 
-注意 `create_experiment` 的 `goal_id` 是**必填**的，因为实验必须挂在大目标下面。
+注意：
+
+- `create_experiment` 的 `goal_id` 是**必填**的，因为实验必须挂在大目标下面。
+- `log_metric` 的 `note` 是这一行的上下文说明（"这一轮改了 lr" / "用的是验证集" 之类）。
+  指标记录**不画曲线**，只纯记录。
+- 旧版用过的 `config={"lr": 0.001}` 已经废弃 —— 超参现在是 Markdown 文字
+  `config_md`，手记即可，训练脚本不需要管。
 
 ### 直接调 HTTP API
 
@@ -164,19 +172,37 @@ curl -X POST http://127.0.0.1:8000/api/projects/1/goals \
      -H 'Content-Type: application/json' \
      -d '{"name": "2D 角谱反演验证"}'
 
-# 3. 建实验（goal_id 必填）
+# 3. 建实验（goal_id 必填；config_md 是 Markdown 文字）
 curl -X POST http://127.0.0.1:8000/api/projects/1/experiments \
      -H 'Content-Type: application/json' \
-     -d '{"name": "exp-001", "goal_id": 1, "config": {"lr": 0.001}}'
+     -d '{"name": "exp-001", "goal_id": 1, "config_md": "- lr: 0.001\n- batch_size: 32"}'
 
-# 4. 记录指标
+# 4. 记录指标（带备注）
 curl -X POST http://127.0.0.1:8000/api/experiments/1/metrics \
      -H 'Content-Type: application/json' \
-     -d '{"key": "loss", "value": 0.123, "step": 0}'
+     -d '{"key": "loss", "value": 0.123, "note": "epoch 1"}'
+
+# 5. 上传文件（图片 / .pt 都行；归属三选一）
+curl -X POST http://127.0.0.1:8000/api/experiments/1/artifacts \
+     -F 'file=@/path/to/best.pt' \
+     -F 'description=最终模型权重'
 ```
 
 Windows 的 CMD / PowerShell 不认上面的反斜杠续行和单引号，
 建议直接用 `/docs` 页面点着调试，或者用上面的 Python 写法。
+
+### 导出实验
+
+实验详情页和上传结果页右上角都有 **📦 导出** 按钮，点了就把这个实验打包成 ZIP 下载：
+
+```
+experiment.md      # 整篇可读的 Markdown(简介+假设+配置+笔记+结果)
+metrics.csv        # 所有指标（带 UTF-8 BOM,Excel 直接打开不乱码）
+notes/             # 多条笔记各一篇 Markdown；只有一条就 notes.md
+artifacts/         # 图片、.pt 等全部附件原样打包
+```
+
+API 端点：`GET /api/experiments/{id}/export`
 
 ---
 
@@ -243,8 +269,8 @@ workbench/
 
 ### 已知的待办
 
-- `/cases`、`/files`、`/review`、`/settings` 四个页面还是占位符
-- `app/static/charts.js` 目前没有任何模板引用它（图表走的是内联 SVG）
+- `/cases` 和 `/settings` 两个页面还是占位符
+- `app/static/charts.js` 目前没有任何模板引用它（指标走的是表格，不再画曲线）
 - `base.html` 加载了本地化的 HTMX（`app/static/htmx.min.js`，不依赖外部 CDN），但代码里还没有用到任何 `hx-*` 属性
 - `WORKBENCH_DEBUG` 和 `WORKBENCH_PAGE_SIZE` 两个配置项已声明但尚未接线
 

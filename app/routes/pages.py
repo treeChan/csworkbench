@@ -22,12 +22,10 @@ URL 设计：
 
 from __future__ import annotations
 
-import json
-from collections import defaultdict
 from datetime import datetime
 from pathlib import Path
 
-from fastapi import APIRouter, Depends, Form, HTTPException, Request, status
+from fastapi import APIRouter, Depends, File, Form, HTTPException, Request, UploadFile
 from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
 from sqlalchemy.orm import Session
@@ -557,7 +555,7 @@ def new_experiment_form(
     return render(
         request, "experiment_form.html",
         {"project": project, "goals": goals,
-         "experiment": None, "config_json": "", "action": "Create"},
+         "experiment": None, "config_md": "", "action": "Create"},
     )
 
 
@@ -570,7 +568,7 @@ def create_experiment(
     design_notes: str = Form(""),
     due_date: str = Form(""),
     git_commit: str = Form(""),
-    config_json: str = Form("{}"),
+    config_md: str = Form(""),
     goal_id: int = Form(...),
     db: Session = Depends(get_db),
 ):
@@ -584,19 +582,8 @@ def create_experiment(
         return render(
             request, "experiment_form.html",
             {"project": project, "goals": crud.list_goals(db, project_id),
-             "experiment": None, "config_json": config_json,
+             "experiment": None, "config_md": config_md,
              "action": "Create", "error": f"所选大目标不存在或不属于该项目"},
-            status_code=400,
-        )
-
-    try:
-        config = json.loads(config_json) if config_json.strip() else {}
-    except json.JSONDecodeError as e:
-        return render(
-            request, "experiment_form.html",
-            {"project": project, "goals": crud.list_goals(db, project_id),
-             "experiment": None, "config_json": config_json,
-             "action": "Create", "error": f"Config 不是合法 JSON: {e}"},
             status_code=400,
         )
 
@@ -607,7 +594,7 @@ def create_experiment(
         design_notes=design_notes,
         due_date=due_date or None,
         git_commit=git_commit or None,
-        config=config,
+        config_md=config_md,
         goal_id=goal_id,
     )
     exp = crud.create_experiment(db, project_id, data)
@@ -626,11 +613,7 @@ def experiment_detail(
 
     metrics = crud.list_metrics(db, experiment_id)
     notes = crud.list_notes(db, experiment_id)
-
-    # 按 key 分组，供前端画图
-    grouped: dict[str, list[dict]] = defaultdict(list)
-    for m in metrics:
-        grouped[m.key].append({"step": m.step, "value": m.value, "id": m.id})
+    artifacts = crud.list_artifacts(db, experiment_id=experiment_id)
 
     return render(
         request, "experiment_detail.html",
@@ -639,8 +622,8 @@ def experiment_detail(
             "goal": goal,
             "experiment": exp,
             "metrics": metrics,
-            "metrics_grouped": dict(grouped),
             "notes": notes,
+            "artifacts": artifacts,
         },
     )
 
@@ -661,9 +644,7 @@ def upload_results_form(
     goal = crud.get_goal(db, exp.goal_id) if exp.goal_id else None
     metrics = crud.list_metrics(db, experiment_id)
     notes = crud.list_notes(db, experiment_id)
-    grouped: dict[str, list[dict]] = defaultdict(list)
-    for m in metrics:
-        grouped[m.key].append({"step": m.step, "value": m.value, "id": m.id})
+    artifacts = crud.list_artifacts(db, experiment_id=experiment_id)
     return render(
         request, "experiment_results.html",
         {
@@ -671,8 +652,8 @@ def upload_results_form(
             "goal": goal,
             "experiment": exp,
             "metrics": metrics,
-            "metrics_grouped": dict(grouped),
             "notes": notes,
+            "artifacts": artifacts,
         },
     )
 
@@ -703,7 +684,7 @@ def edit_experiment_form(
     return render(
         request, "experiment_form.html",
         {"project": project, "goals": goals, "experiment": exp,
-         "config_json": json.dumps(exp.config, ensure_ascii=False, indent=2),
+         "config_md": exp.config_md,
          "action": "Edit"},
     )
 
@@ -717,7 +698,7 @@ def update_experiment(
     design_notes: str = Form(""),
     due_date: str = Form(""),
     git_commit: str = Form(""),
-    config_json: str = Form("{}"),
+    config_md: str = Form(""),
     goal_id: int = Form(...),
     db: Session = Depends(get_db),
 ):
@@ -732,20 +713,8 @@ def update_experiment(
         return render(
             request, "experiment_form.html",
             {"project": project, "goals": crud.list_goals(db, exp.project_id),
-             "experiment": exp, "config_json": config_json,
+             "experiment": exp, "config_md": config_md,
              "action": "Edit", "error": "所选大目标不存在或不属于该项目"},
-            status_code=400,
-        )
-
-    try:
-        config = json.loads(config_json) if config_json.strip() else {}
-    except json.JSONDecodeError as e:
-        project = crud.get_project(db, exp.project_id)
-        return render(
-            request, "experiment_form.html",
-            {"project": project, "goals": crud.list_goals(db, exp.project_id),
-             "experiment": exp, "config_json": config_json,
-             "action": "Edit", "error": f"Config 不是合法 JSON: {e}"},
             status_code=400,
         )
 
@@ -756,7 +725,7 @@ def update_experiment(
         design_notes=design_notes,
         due_date=due_date or None,
         git_commit=git_commit or None,
-        config=config,
+        config_md=config_md,
         goal_id=goal_id,
     )
     crud.update_experiment(db, exp, data)
@@ -785,6 +754,7 @@ def add_metric(
     experiment_id: int,
     key: str = Form(...),
     value: float = Form(...),
+    note: str = Form(""),
     step: int | None = Form(None),
     db: Session = Depends(get_db),
 ):
@@ -792,9 +762,11 @@ def add_metric(
     if exp is None:
         raise HTTPException(404, "Experiment not found")
     crud.create_metric(
-        db, experiment_id, schemas.MetricCreate(key=key, value=value, step=step)
+        db, experiment_id,
+        schemas.MetricCreate(key=key, value=value, note=note, step=step),
     )
-    return RedirectResponse(f"/experiments/{experiment_id}", status_code=303)
+    # 提交后回到「上传结果」页(用户加指标就是在这一页)
+    return RedirectResponse(f"/experiments/{experiment_id}/results", status_code=303)
 
 
 @router.post("/metrics/{metric_id}/delete")
@@ -832,3 +804,352 @@ def remove_note(
     exp_id = note.experiment_id
     crud.delete_note(db, note)
     return RedirectResponse(f"/experiments/{exp_id}", status_code=303)
+
+
+# ---------------------------------------------------------------------------
+# Artifact (文件与成果) - 表单上传 + 文件下载代理
+# ---------------------------------------------------------------------------
+
+
+@router.post("/experiments/{experiment_id}/artifacts")
+async def upload_experiment_artifact(
+    experiment_id: int,
+    request: Request,
+    file: "UploadFile" = Form(...),  # type: ignore[name-defined]
+    description: str = Form(""),
+    db: Session = Depends(get_db),
+):
+    """实验页 / 结果页里上传文件。"""
+    exp = crud.get_experiment(db, experiment_id)
+    if exp is None:
+        raise HTTPException(404, "Experiment not found")
+    # 大小限制
+    from app.config import settings as _settings
+    blob = await file.read()
+    if len(blob) > _settings.max_upload_size_mb * 1024 * 1024:
+        raise HTTPException(413, f"文件超过 {_settings.max_upload_size_mb} MB 上限")
+    # 把字节塞回去给 crud
+    import io as _io
+    file.file = _io.BytesIO(blob)
+    crud.create_artifact(
+        db, file,
+        owner_kind="experiment",
+        owner_id=experiment_id,
+        description=description,
+    )
+    # 回上传发起页(Referer 优先,失败回结果页)
+    referer = request.headers.get("referer")
+    if referer and "/results" in referer:
+        target = f"/experiments/{experiment_id}/results"
+    else:
+        target = f"/experiments/{experiment_id}"
+    return RedirectResponse(target, status_code=303)
+
+
+@router.post("/projects/{project_id}/artifacts")
+async def upload_project_artifact(
+    project_id: int,
+    file: "UploadFile" = Form(...),  # type: ignore[name-defined]
+    description: str = Form(""),
+    db: Session = Depends(get_db),
+):
+    project = crud.get_project(db, project_id)
+    if project is None:
+        raise HTTPException(404, "Project not found")
+    from app.config import settings as _settings
+    blob = await file.read()
+    if len(blob) > _settings.max_upload_size_mb * 1024 * 1024:
+        raise HTTPException(413, f"文件超过 {_settings.max_upload_size_mb} MB 上限")
+    import io as _io
+    file.file = _io.BytesIO(blob)
+    crud.create_artifact(
+        db, file,
+        owner_kind="project",
+        owner_id=project_id,
+        description=description,
+    )
+    return RedirectResponse(f"/projects/{project_id}", status_code=303)
+
+
+@router.post("/goals/{goal_id}/artifacts")
+async def upload_goal_artifact(
+    goal_id: int,
+    file: "UploadFile" = Form(...),  # type: ignore[name-defined]
+    description: str = Form(""),
+    db: Session = Depends(get_db),
+):
+    goal = crud.get_goal(db, goal_id)
+    if goal is None:
+        raise HTTPException(404, "Goal not found")
+    from app.config import settings as _settings
+    blob = await file.read()
+    if len(blob) > _settings.max_upload_size_mb * 1024 * 1024:
+        raise HTTPException(413, f"文件超过 {_settings.max_upload_size_mb} MB 上限")
+    import io as _io
+    file.file = _io.BytesIO(blob)
+    crud.create_artifact(
+        db, file,
+        owner_kind="goal",
+        owner_id=goal_id,
+        description=description,
+    )
+    return RedirectResponse(f"/projects/{goal.project_id}", status_code=303)
+
+
+@router.post("/artifacts/{artifact_id}/delete")
+def delete_artifact_page(
+    artifact_id: int, request: Request, db: Session = Depends(get_db)
+) -> RedirectResponse:
+    art = crud.get_artifact(db, artifact_id)
+    if art is None:
+        raise HTTPException(404, "Artifact not found")
+    # 记录下归属,删完跳回去
+    if art.experiment_id:
+        target = f"/experiments/{art.experiment_id}/results"
+    elif art.goal_id:
+        goal = crud.get_goal(db, art.goal_id)
+        target = f"/projects/{goal.project_id}" if goal else "/files"
+    elif art.project_id:
+        target = f"/projects/{art.project_id}"
+    else:
+        target = "/files"
+    crud.delete_artifact(db, art)
+    return RedirectResponse(target, status_code=303)
+
+
+# ---------------------------------------------------------------------------
+# 文件与成果总览页 /files
+# ---------------------------------------------------------------------------
+
+
+@router.get("/files", response_class=HTMLResponse)
+def files_overview(request: Request, db: Session = Depends(get_db)) -> HTMLResponse:
+    """文件与成果总览：按归属（项目 / 大目标 / 实验）分组列出。"""
+    artifacts = crud.list_artifacts(db)
+    projects = {p.id: p for p in crud.list_projects(db)}
+    goals = {g.id: g for g in db.scalars(select(models.Goal)).all()}
+
+    grouped: dict[str, list[models.Artifact]] = {
+        "project": [], "goal": [], "experiment": [],
+    }
+    for a in artifacts:
+        if a.project_id:
+            grouped["project"].append(a)
+        elif a.goal_id:
+            grouped["goal"].append(a)
+        elif a.experiment_id:
+            grouped["experiment"].append(a)
+
+    total_bytes = sum(a.size_bytes for a in artifacts)
+    return render(
+        request, "files.html",
+        {
+            "active_nav": "files",
+            "artifacts": artifacts,
+            "projects": projects,
+            "goals": goals,
+            "grouped": grouped,
+            "total_count": len(artifacts),
+            "total_bytes": total_bytes,
+        },
+    )
+
+
+# ---------------------------------------------------------------------------
+# 周复盘 /review
+# ---------------------------------------------------------------------------
+
+
+def _monday_of(d: datetime) -> datetime:
+    """返回给定日期所在周的周一。"""
+    from datetime import timedelta
+    return d - timedelta(days=d.weekday())
+
+
+@router.get("/review", response_class=HTMLResponse)
+def review_list(request: Request, db: Session = Depends(get_db)) -> HTMLResponse:
+    reviews = crud.list_weekly_reviews(db, limit=100)
+    # 给新建按钮算一个默认的本周一
+    today = datetime.utcnow()
+    this_monday = _monday_of(today).date()
+    return render(
+        request, "review.html",
+        {
+            "active_nav": "review",
+            "reviews": reviews,
+            "this_monday": this_monday.isoformat(),
+        },
+    )
+
+
+@router.get("/review/new", response_class=HTMLResponse)
+def new_review_form(request: Request, db: Session = Depends(get_db)) -> HTMLResponse:
+    today = datetime.utcnow()
+    this_monday = _monday_of(today).date()
+    return render(
+        request, "weekly_review_form.html",
+        {
+            "active_nav": "review",
+            "review": None,
+            "week_start_default": this_monday.isoformat(),
+            "action": "Create",
+        },
+    )
+
+
+@router.post("/review/new")
+def create_review(
+    request: Request,
+    week_start_date: str = Form(...),
+    title: str = Form(""),
+    content: str = Form(""),
+    highlights: str = Form(""),
+    blockers: str = Form(""),
+    next_focus: str = Form(""),
+    db: Session = Depends(get_db),
+):
+    from datetime import date
+    try:
+        d = date.fromisoformat(week_start_date)
+    except ValueError:
+        return render(
+            request, "weekly_review_form.html",
+            {
+                "active_nav": "review",
+                "review": None,
+                "week_start_default": week_start_date,
+                "action": "Create",
+                "error": "起始日期格式不对（应为 YYYY-MM-DD）",
+            },
+            status_code=400,
+        )
+    # 默认标题
+    if not title:
+        from datetime import timedelta
+        title = f"第 {d.isocalendar()[1]} 周 ({d.isoformat()} ~ {(d + timedelta(days=6)).isoformat()})"
+    review = crud.create_weekly_review(
+        db,
+        schemas.WeeklyReviewCreate(
+            week_start_date=d,
+            title=title,
+            content=content,
+            highlights=highlights,
+            blockers=blockers,
+            next_focus=next_focus,
+        ),
+    )
+    return RedirectResponse(f"/review/{review.id}", status_code=303)
+
+
+@router.get("/review/{review_id}", response_class=HTMLResponse)
+def review_detail(
+    review_id: int, request: Request, db: Session = Depends(get_db)
+) -> HTMLResponse:
+    review = crud.get_weekly_review(db, review_id)
+    if review is None:
+        raise HTTPException(404, "WeeklyReview not found")
+    return render(
+        request, "weekly_review_detail.html",
+        {"active_nav": "review", "review": review},
+    )
+
+
+@router.get("/review/{review_id}/edit", response_class=HTMLResponse)
+def edit_review_form(
+    review_id: int, request: Request, db: Session = Depends(get_db)
+) -> HTMLResponse:
+    review = crud.get_weekly_review(db, review_id)
+    if review is None:
+        raise HTTPException(404, "WeeklyReview not found")
+    return render(
+        request, "weekly_review_form.html",
+        {
+            "active_nav": "review",
+            "review": review,
+            "week_start_default": review.week_start_date.isoformat(),
+            "action": "Edit",
+        },
+    )
+
+
+@router.post("/review/{review_id}")
+def update_review(
+    review_id: int,
+    week_start_date: str = Form(...),
+    title: str = Form(""),
+    content: str = Form(""),
+    highlights: str = Form(""),
+    blockers: str = Form(""),
+    next_focus: str = Form(""),
+    db: Session = Depends(get_db),
+):
+    review = crud.get_weekly_review(db, review_id)
+    if review is None:
+        raise HTTPException(404, "WeeklyReview not found")
+    from datetime import date
+    try:
+        d = date.fromisoformat(week_start_date)
+    except ValueError:
+        return render(
+            request, "weekly_review_form.html",
+            {
+                "active_nav": "review",
+                "review": review,
+                "week_start_default": week_start_date,
+                "action": "Edit",
+                "error": "起始日期格式不对（应为 YYYY-MM-DD）",
+            },
+            status_code=400,
+        )
+    crud.update_weekly_review(
+        db, review,
+        schemas.WeeklyReviewUpdate(
+            week_start_date=d,
+            title=title,
+            content=content,
+            highlights=highlights,
+            blockers=blockers,
+            next_focus=next_focus,
+        ),
+    )
+    return RedirectResponse(f"/review/{review_id}", status_code=303)
+
+
+@router.post("/review/{review_id}/delete")
+def delete_review(
+    review_id: int, db: Session = Depends(get_db)
+) -> RedirectResponse:
+    review = crud.get_weekly_review(db, review_id)
+    if review is None:
+        raise HTTPException(404, "WeeklyReview not found")
+    crud.delete_weekly_review(db, review)
+    return RedirectResponse("/review", status_code=303)
+
+
+# ---------------------------------------------------------------------------
+# 占位导航页面（避免侧栏点击 404）
+# ---------------------------------------------------------------------------
+
+
+_PLACEHOLDER_PAGES = [
+    ("cases", "🧪", "仿真与试验", "工况矩阵、参数扫描、试验数据汇总 — 后续接入"),
+    ("settings", "⚙️", "设置", "主题、标签、导入导出 — 后续接入"),
+]
+
+
+for _key, _icon, _title, _desc in _PLACEHOLDER_PAGES:
+
+    def _make_page(key: str = _key, icon: str = _icon,
+                   title: str = _title, desc: str = _desc):
+        def _page(request: Request) -> HTMLResponse:
+            return render(
+                request, "placeholder.html",
+                {"active_nav": key, "page_icon": icon,
+                 "page_title": title, "page_desc": desc},
+            )
+        return _page
+
+    router.add_api_route(
+        f"/{_key}", _make_page(), methods=["GET"],
+        response_class=HTMLResponse,
+    )
