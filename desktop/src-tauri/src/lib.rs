@@ -54,13 +54,13 @@ pub fn run() {
                 .map_err(|e| e.to_string())?
                 .args(vec![
                     "--db".into(),
-                    db.to_string_lossy().into_string(),
+                    db.to_string_lossy().into_owned(),
                     "--port".into(),
                     "8750".into(),
                     "--port-file".into(),
-                    port_file.to_string_lossy().into_string(),
+                    port_file.to_string_lossy().into_owned(),
                     "--artifacts".into(),
-                    dir.join("artifacts").to_string_lossy().into_string(),
+                    dir.join("artifacts").to_string_lossy().into_owned(),
                 ])
                 .spawn()
                 .map_err(|e| e.to_string())?;
