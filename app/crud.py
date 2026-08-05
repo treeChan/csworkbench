@@ -12,7 +12,7 @@ from pathlib import Path
 from typing import Sequence
 
 from fastapi import UploadFile
-from sqlalchemy import func, select
+from sqlalchemy import func, or_, select
 from sqlalchemy.orm import Session
 
 from app import models, schemas
@@ -778,4 +778,216 @@ def recent_activity(
     # 按时间倒序，取前 limit 条
     activities.sort(key=lambda x: x["time"], reverse=True)
     return activities[:limit]
+
+
+# ---------------------------------------------------------------------------
+# Search（搜索）
+# ---------------------------------------------------------------------------
+
+
+def _snip(text: str | None, limit: int = 80) -> str:
+    """把正文压成一行摘要，超长截断。"""
+    flat = " ".join((text or "").split())
+    return flat if len(flat) <= limit else flat[:limit] + "…"
+
+
+def search_all(
+    db: Session, query: str, fulltext: bool = False, limit: int = 20
+) -> list[dict]:
+    """全库搜索，按实体分组。返回 list[dict] 供 /search 模板直接渲染。
+
+    默认「快速搜索」只匹配标题/名称类字段；fulltext=True 时追加正文 LIKE。
+    个人数据量小，SQL LIKE 全扫毫秒级返回，不需要 FTS5、不需要进度条。
+    """
+    kw = f"%{query}%"
+    groups: list[dict] = []
+
+    # --- ① 项目：name（快速）；+ description / tags（全文）---
+    p_where = models.Project.name.like(kw)
+    if fulltext:
+        p_where = or_(
+            p_where,
+            models.Project.description.like(kw),
+            models.Project.tags.like(kw),
+        )
+    projects = db.scalars(
+        select(models.Project)
+        .where(p_where)
+        .order_by(models.Project.updated_at.desc())
+        .limit(limit)
+    ).all()
+    if projects:
+        groups.append(
+            {
+                "key": "projects",
+                "label": "项目",
+                "icon": "📁",
+                "items": [
+                    {
+                        "title": p.name,
+                        "badge": p.status,
+                        "snippet": _snip(p.description),
+                        "link": f"/projects/{p.id}",
+                    }
+                    for p in projects
+                ],
+            }
+        )
+
+    # --- ② 实验与目标：name（快速）；+ 正文（全文）---
+    e_where = models.Experiment.name.like(kw)
+    if fulltext:
+        e_where = or_(
+            e_where,
+            models.Experiment.description.like(kw),
+            models.Experiment.hypothesis.like(kw),
+            models.Experiment.design_notes.like(kw),
+            models.Experiment.result_summary.like(kw),
+            models.Experiment.config_md.like(kw),
+        )
+    exps = db.scalars(
+        select(models.Experiment)
+        .where(e_where)
+        .order_by(models.Experiment.updated_at.desc())
+        .limit(limit)
+    ).all()
+    g_where = models.Goal.name.like(kw)
+    if fulltext:
+        g_where = or_(g_where, models.Goal.description.like(kw))
+    goals = db.scalars(
+        select(models.Goal)
+        .where(g_where)
+        .order_by(models.Goal.updated_at.desc())
+        .limit(limit)
+    ).all()
+    items = [
+        {
+            "title": e.name,
+            "badge": "实验",
+            "snippet": _snip(e.hypothesis or e.description),
+            "link": f"/experiments/{e.id}",
+        }
+        for e in exps
+    ] + [
+        {
+            "title": g.name,
+            "badge": "大目标",
+            "snippet": _snip(g.description),
+            "link": f"/projects/{g.project_id}",
+        }
+        for g in goals
+    ]
+    if items:
+        groups.append({"key": "exp_goal", "label": "实验与目标", "icon": "🧪", "items": items})
+
+    # --- ③ 文件：original_name（快速）；+ description（全文）---
+    a_where = models.Artifact.original_name.like(kw)
+    if fulltext:
+        a_where = or_(a_where, models.Artifact.description.like(kw))
+    arts = db.scalars(
+        select(models.Artifact)
+        .where(a_where)
+        .order_by(models.Artifact.uploaded_at.desc())
+        .limit(limit)
+    ).all()
+    if arts:
+        goal_map = {g.id: g for g in db.scalars(select(models.Goal))}
+        groups.append(
+            {
+                "key": "artifacts",
+                "label": "文件",
+                "icon": "📦",
+                "items": [
+                    {
+                        "title": a.original_name,
+                        "badge": a.kind,
+                        "snippet": _snip(a.description),
+                        "link": (
+                            f"/experiments/{a.experiment_id}"
+                            if a.experiment_id
+                            else (
+                                f"/projects/{goal_map[a.goal_id].project_id}"
+                                if a.goal_id and a.goal_id in goal_map
+                                else f"/projects/{a.project_id}"
+                            )
+                        ),
+                        "download": f"/api/artifacts/{a.id}/download",
+                    }
+                    for a in arts
+                ],
+            }
+        )
+
+    # --- ④ 笔记与决策：Decision.content（快速）；Note.content（全文）---
+    decs = db.scalars(
+        select(models.Decision)
+        .where(models.Decision.content.like(kw))
+        .order_by(models.Decision.created_at.desc())
+        .limit(limit)
+    ).all()
+    notes: list[models.Note] = []
+    if fulltext:
+        notes = db.scalars(
+            select(models.Note)
+            .where(models.Note.content.like(kw))
+            .order_by(models.Note.created_at.desc())
+            .limit(limit)
+        ).all()
+    items = [
+        {
+            "title": _snip(d.content, 50),
+            "badge": "决策",
+            "snippet": _snip(d.content),
+            "link": f"/projects/{d.project_id}",
+        }
+        for d in decs
+    ] + [
+        {
+            "title": _snip(n.content, 50),
+            "badge": "笔记",
+            "snippet": _snip(n.content),
+            "link": f"/experiments/{n.experiment_id}",
+        }
+        for n in notes
+    ]
+    if items:
+        groups.append(
+            {"key": "notes_decisions", "label": "笔记与决策", "icon": "📝", "items": items}
+        )
+
+    # --- ⑤ 周复盘：title（快速）；+ 正文（全文）---
+    w_where = models.WeeklyReview.title.like(kw)
+    if fulltext:
+        w_where = or_(
+            w_where,
+            models.WeeklyReview.content.like(kw),
+            models.WeeklyReview.highlights.like(kw),
+            models.WeeklyReview.blockers.like(kw),
+            models.WeeklyReview.next_focus.like(kw),
+        )
+    reviews = db.scalars(
+        select(models.WeeklyReview)
+        .where(w_where)
+        .order_by(models.WeeklyReview.week_start_date.desc())
+        .limit(limit)
+    ).all()
+    if reviews:
+        groups.append(
+            {
+                "key": "reviews",
+                "label": "周复盘",
+                "icon": "📅",
+                "items": [
+                    {
+                        "title": r.title or f"第 {r.week_start_date.isocalendar()[1]} 周",
+                        "badge": r.week_start_date.isoformat(),
+                        "snippet": _snip(r.highlights or r.content),
+                        "link": f"/review/{r.id}",
+                    }
+                    for r in reviews
+                ],
+            }
+        )
+
+    return groups
 

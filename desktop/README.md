@@ -101,6 +101,39 @@ python -m uvicorn app.main:app --port 8000   # 从仓库根起后端
 cd desktop && npx tauri dev                  # 窗口直连 devUrl 8000
 ```
 
+## 新功能发布流程（网页版开发 → 桌面版分发）
+
+网页版和桌面版共用同一份 `app/` 后端代码：桌面版只是用 PyInstaller 把同一个
+FastAPI 应用打包成 sidecar，再套一层 Tauri 壳，窗口最终 navigate 到
+`http://127.0.0.1:PORT/`。所以没有两套功能要维护，发版节奏是：
+
+1. **网页版开发调试**：`python start.py --dev`（热重载 + 看日志，成本最低）
+2. **新功能开发完** → 过一遍下面的**打包检查清单**
+3. **打 tag 推送** → CI 自动在 macOS / Windows / Linux 三平台出安装包
+4. **到 GitHub Releases 发布 draft Release** → 用户下载安装
+
+### 打包检查清单（每次发版前逐项过）
+
+网页版 `python start.py` 正常不代表桌面版就绪——PyInstaller 是**静态收集**，
+漏掉的东西网页版看不出来，只会在安装包里缺。发版前检查：
+
+- [ ] **版本号对齐**：`src-tauri/tauri.conf.json` 与 `src-tauri/Cargo.toml`
+      的 `version` 改成新版本，再打同名 tag（CI 用 `github.ref_name`
+      命名 Release，建议 tag 与 version 一致）
+- [ ] **新增第三方依赖** → 加进 `sidecar/requirements-desktop.txt`，并确认
+      `workbench-server.spec` 的 `collect_all` / `collect_submodules` 列表
+      覆盖到了（没覆盖就补）
+- [ ] **新增静态资源 / 模板目录** → 确认 `workbench-server.spec` 的
+      `--add-data` 覆盖到（目前只打了 `app/templates` 和 `app/static`）
+- [ ] **本地 PyInstaller 冒烟**（几十秒，打 tag 前必跑）：
+      ```bash
+      cd desktop/sidecar
+      .venv/bin/python -m PyInstaller --clean --noconfirm workbench-server.spec
+      ./dist/workbench-server --db /tmp/wb.db --port 0
+      ```
+      另开终端验证 `/health` 返回 200、`/` 首页能渲染；涉及上传 / 模板渲染的
+      新功能，冒烟里顺手点一遍新页面，确认路径没被 PyInstaller 解压目录搞坏。
+
 ## 数据目录
 
 Rust 侧用 `app.path().app_data_dir()` 决定，数据自动创建：

@@ -4,6 +4,17 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>{% block title %}{{ app_name|default('Workbench') }}{% endblock %}</title>
+    <script>
+    /* 主题初始化：首次绘制前设 data-theme，避免闪一下亮色 */
+    (function () {
+        try {
+            var t = localStorage.getItem("wb-theme");
+            var dark = t === "dark" ||
+                (t === null && window.matchMedia("(prefers-color-scheme: dark)").matches);
+            if (dark) document.documentElement.setAttribute("data-theme", "dark");
+        } catch (e) {}
+    })();
+    </script>
     <link rel="stylesheet" href="/static/style.css">
     <script src="/static/htmx.min.js" defer></script>
     {% block head %}{% endblock %}
@@ -33,17 +44,30 @@
     </div>
 
     <div class="topbar-center">
-        <div class="search-box">
+        <form class="search-box" action="/search" method="get" role="search">
             <span class="search-icon">🔍</span>
-            <input type="search" placeholder="搜索项目、工况、结论或文件">
+            <input type="search" id="top-search" name="q" placeholder="搜索项目、工况、结论或文件"
+                   value="{{ q|default('') }}">
             <kbd>Ctrl K</kbd>
-        </div>
+        </form>
     </div>
 
     <div class="topbar-right">
-        <button class="btn btn-primary">+ 快速创建</button>
-        <button class="icon-btn" title="主题切换">🌙</button>
-        <div class="avatar">Z</div>
+        <div class="quick-create">
+            <button class="btn btn-primary" id="quick-create-btn"
+                    aria-haspopup="true" aria-expanded="false">
+                + 快速创建 <span class="caret">▾</span>
+            </button>
+            <div class="quick-create-menu" id="quick-create-menu" hidden>
+                <a class="quick-create-item" href="/projects/new">📁 新建项目</a>
+                {% if active_project %}
+                <a class="quick-create-item" href="/projects/{{ active_project.id }}/goals/new">🎯 新建大目标</a>
+                <a class="quick-create-item" href="/projects/{{ active_project.id }}/experiments/new">🧪 新建实验</a>
+                <a class="quick-create-item" href="/review/new">📅 新建周复盘</a>
+                {% endif %}
+            </div>
+        </div>
+        <button class="icon-btn" id="theme-toggle" title="切换主题">🌙</button>
     </div>
 </header>
 
@@ -158,6 +182,65 @@ function selectQuickType(btn) {
     btn.classList.add('active');
     document.getElementById('quick-record-type').value = btn.dataset.type;
 }
+</script>
+
+<script>
+/* ===== 顶栏：搜索聚焦 / 快速创建下拉 / 主题切换 ===== */
+(function () {
+    "use strict";
+    var searchInput = document.getElementById("top-search");
+    var createBtn = document.getElementById("quick-create-btn");
+    var createMenu = document.getElementById("quick-create-menu");
+    var themeBtn = document.getElementById("theme-toggle");
+
+    function toggleQuickCreate() {
+        var hidden = createMenu.hasAttribute("hidden");
+        createMenu.toggleAttribute("hidden");
+        createBtn.setAttribute("aria-expanded", String(hidden));
+    }
+
+    if (createBtn && createMenu) {
+        createBtn.addEventListener("click", function (e) {
+            e.stopPropagation();
+            toggleQuickCreate();
+        });
+        // 点外部 / Esc 关闭
+        document.addEventListener("click", function () {
+            if (!createMenu.hasAttribute("hidden")) toggleQuickCreate();
+        });
+        document.addEventListener("keydown", function (e) {
+            if (e.key === "Escape" && !createMenu.hasAttribute("hidden")) toggleQuickCreate();
+        });
+    }
+
+    // 主题切换（localStorage 记忆）
+    function updateThemeIcon() {
+        var dark = document.documentElement.getAttribute("data-theme") === "dark";
+        themeBtn.textContent = dark ? "☀️" : "🌙";
+        themeBtn.title = dark ? "切换到亮色" : "切换到暗色";
+    }
+    if (themeBtn) {
+        themeBtn.addEventListener("click", function () {
+            var root = document.documentElement;
+            var next = root.getAttribute("data-theme") === "dark" ? "light" : "dark";
+            root.setAttribute("data-theme", next);
+            try { localStorage.setItem("wb-theme", next); } catch (e) {}
+            updateThemeIcon();
+        });
+        updateThemeIcon();
+    }
+
+    // 快捷键：Ctrl K 聚焦搜索，Ctrl N 打开快速创建
+    document.addEventListener("keydown", function (e) {
+        if (e.ctrlKey && (e.key === "k" || e.key === "K")) {
+            e.preventDefault();
+            if (searchInput) searchInput.focus();
+        } else if (e.ctrlKey && (e.key === "n" || e.key === "N")) {
+            e.preventDefault();
+            if (createBtn && createMenu) toggleQuickCreate();
+        }
+    });
+})();
 </script>
 {% endblock %}
 </body>

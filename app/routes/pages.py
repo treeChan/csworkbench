@@ -1131,6 +1131,38 @@ def delete_review(
 # ---------------------------------------------------------------------------
 
 
+# ---------------------------------------------------------------------------
+# 搜索（顶栏搜索框 → /search?q=）
+# ---------------------------------------------------------------------------
+
+
+@router.get("/search", response_class=HTMLResponse)
+def search_page(
+    request: Request,
+    q: str = "",
+    fulltext: int = 0,
+    db: Session = Depends(get_db),
+) -> HTMLResponse:
+    """全库搜索页。
+
+    默认「快速搜索」只匹配标题/名称类字段；?fulltext=1 切「全文搜索」，
+    追加正文 LIKE 扫全表。个人数据量小，毫秒级返回。
+    """
+    query = q.strip()
+    groups = crud.search_all(db, query, fulltext=bool(fulltext)) if query else []
+    total = sum(len(g["items"]) for g in groups)
+    return render(
+        request, "search.html",
+        {
+            "active_nav": "",  # 侧栏任何一项都不点亮
+            "q": query,
+            "fulltext": bool(fulltext),
+            "groups": groups,
+            "total": total,
+        },
+    )
+
+
 _PLACEHOLDER_PAGES = [
     ("cases", "🧪", "仿真与试验", "工况矩阵、参数扫描、试验数据汇总 — 后续接入"),
     ("settings", "⚙️", "设置", "主题、标签、导入导出 — 后续接入"),
