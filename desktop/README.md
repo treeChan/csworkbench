@@ -51,7 +51,13 @@ stdin 到 EOF 就自杀（宿主退出 → 管道关闭）；③ 单实例插件
 | 参数 | `--db <workbench.db 绝对路径>` `--port <首选端口，默认 8750>` `--port-file <握手文件>` `--artifacts <上传文件根目录>` |
 | stdout | 就绪后只输出一行 `{"status":"ready","port":N}`（uvicorn 日志走 stderr） |
 | stdin | 读到 EOF 即退出（宿主导出兜底） |
-| 数据路径 | 通过环境变量 `WORKBENCH_DB_PATH` 传给 FastAPI；上传文件目录走 `WORKBENCH_ARTIFACT_DIR`（都在 `import app` 之前设置，必须指向持久化目录——PyInstaller 的 BASE_DIR 是临时解压目录） |
+| 数据路径 | 通过环境变量 `WORKBENCH_DB_PATH` 传给 FastAPI；上传文件目录走 `WORKBENCH_ARTIFACT_DIR`（都在 `import app` 之前设置，必须指向持久化目录——PyInstaller 的 BASE_DIR 是临时解压目录）。注意：环境变量优先级高于 `.env`，所以桌面端在设置页改数据库路径只在本进程内生效，重启 App 后回到 `--db` 指定的库（网页版无此限制） |
+
+桌面端设置页的「浏览…」按钮用 `tauri-plugin-dialog` 弹**原生目录选择器**（三平台统一
+API，一次开发通用），选中的目录绝对路径填回输入框；web 版（浏览器）拿不到文件系统
+路径，按钮自动隐藏、保持手动输入。相关配置：`Cargo.toml` 依赖、`lib.rs` 注册插件、
+`tauri.conf.json` 的 `withGlobalTauri`、`capabilities/remote-dialog.json`（仅对本地
+`127.0.0.1` 页面开放 dialog 权限，shell 权限保持 local-only）。
 
 手工冒烟（不需要 Rust 环境）：
 
@@ -65,7 +71,7 @@ curl 127.0.0.1:<打印的端口>/health
 
 ### 方式一：GitHub Actions（推荐，三平台）
 
-1. 在仓库根打 tag 并推送：`git tag v0.2.0 && git push origin v0.2.0`
+1. 在仓库根打 tag 并推送：`git tag v0.3.0 && git push origin v0.3.0`
 2. `.github/workflows/build-desktop.yml` 的矩阵会在 macOS / Windows / Linux
    三个 runner 上各自构建 sidecar + 安装包
 3. 产物出现在 **draft Release** 和 workflow artifacts 里

@@ -28,13 +28,22 @@ import io
 import zipfile
 from datetime import datetime
 
-from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
-from fastapi.responses import StreamingResponse
+from fastapi import (
+    APIRouter,
+    BackgroundTasks,
+    Depends,
+    File,
+    Form,
+    HTTPException,
+    UploadFile,
+)
+from fastapi.responses import FileResponse, StreamingResponse
 from sqlalchemy.orm import Session
 
 from app import crud, schemas
 from app.config import get_artifact_dir, settings
 from app.database import get_db
+from app.services import settings_service
 
 router = APIRouter(prefix="/api", tags=["api"])
 
@@ -815,4 +824,30 @@ def api_export_experiment(experiment_id: int, db: Session = Depends(get_db)):
                 f"filename*=UTF-8''{quoted}"
             )
         },
+    )
+
+# ---------------------------------------------------------------------------
+# 元信息：数据库健康 / 备份（设置模块）
+# ---------------------------------------------------------------------------
+
+
+@router.get("/db-health", tags=["meta"])
+def api_db_health():
+    """状态栏轮询：PRAGMA integrity_check 真实结果 + 数据库文件大小。"""
+    return settings_service.get_db_health()
+
+
+@router.get("/settings/backup", tags=["meta"])
+def api_backup_db(background: BackgroundTasks):
+    """下载完整备份 zip：数据库 + 上传文件 + 配置（跨电脑迁移用）。"""
+    try:
+        tmp = settings_service.create_full_backup()
+    except settings_service.SettingsError as exc:
+        raise HTTPException(500, str(exc))
+    fname = f"workbench-backup-{datetime.now():%Y%m%d-%H%M%S}.zip"
+    background.add_task(tmp.unlink, missing_ok=True)
+    return FileResponse(
+        str(tmp),
+        filename=fname,
+        media_type="application/zip",
     )

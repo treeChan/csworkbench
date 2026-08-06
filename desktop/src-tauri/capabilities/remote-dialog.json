@@ -1,0 +1,8 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "remote-settings-dialog",
+  "description": "Grant the locally-served settings page access to the native directory picker",
+  "windows": ["main"],
+  "remote": { "urls": ["http://127.0.0.1:*/*"] },
+  "permissions": ["core:default", "dialog:allow-open"]
+}

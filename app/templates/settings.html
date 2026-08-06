@@ -1,0 +1,183 @@
+{% extends "base.html" %}
+{% block title %}设置 · {{ app_name }}{% endblock %}
+
+{% block content %}
+<div class="today-header">
+    <h1>⚙️ 设置</h1>
+</div>
+
+{% if error %}
+<div class="alert alert-error">
+    <strong>设置失败：</strong> {{ error }}
+</div>
+{% endif %}
+{% if saved %}
+<div class="alert alert-success">
+    <strong>已保存。</strong>
+    {% if saved == 'storage' %}存储设置已更新（路径迁移已完成）。{% elif saved == 'general' %}常规设置已更新。{% endif %}
+</div>
+{% endif %}
+
+<!-- 外观 -->
+<div class="card settings-card">
+    <h3 class="card-title">🎨 外观</h3>
+    <div class="form-row">
+        <label>主题</label>
+        <div class="theme-picker" id="theme-picker">
+            <label class="theme-option">
+                <input type="radio" name="theme" value="system" onchange="wbSetTheme('system')">
+                跟随系统
+            </label>
+            <label class="theme-option">
+                <input type="radio" name="theme" value="light" onchange="wbSetTheme('light')">
+                亮色
+            </label>
+            <label class="theme-option">
+                <input type="radio" name="theme" value="dark" onchange="wbSetTheme('dark')">
+                暗色
+            </label>
+        </div>
+    </div>
+    <p class="settings-hint">主题保存在本机浏览器；「跟随系统」会随系统外观自动切换。</p>
+</div>
+
+<!-- 数据与存储 -->
+<div class="card settings-card">
+    <h3 class="card-title">💾 数据与存储</h3>
+    <form method="post" action="/settings/storage">
+        <div class="form-row">
+            <label>数据库文件路径</label>
+            <div class="path-input-row">
+                <input type="text" name="db_path" id="db_path" value="{{ db_path }}" required
+                       placeholder="data/workbench.db">
+                <button type="button" class="btn btn-outline browse-btn" data-target="db_path">浏览…</button>
+            </div>
+            <p class="settings-hint">
+                支持相对路径、绝对路径、~ 家目录。修改后自动迁移：先复制并校验完整性、
+                再切换到新库、成功后删除旧库；任一步失败自动回滚原配置。
+            </p>
+        </div>
+        <div class="form-row">
+            <label>上传文件目录</label>
+            <div class="path-input-row">
+                <input type="text" name="artifact_dir" id="artifact_dir" value="{{ artifact_dir }}" required
+                       placeholder="data/artifacts">
+                <button type="button" class="btn btn-outline browse-btn" data-target="artifact_dir">浏览…</button>
+            </div>
+            <p class="settings-hint">图片、模型权重、附件等文件的存放目录。</p>
+        </div>
+        <div class="form-row">
+            <label>单个上传文件上限（MB）</label>
+            <input type="number" name="max_upload_size_mb" min="1" max="2048"
+                   value="{{ max_upload_size_mb }}">
+        </div>
+        <div class="form-actions">
+            <button type="submit" class="btn btn-primary">保存存储设置</button>
+            <a href="/api/settings/backup" class="btn btn-outline">⬇ 下载完整备份</a>
+        </div>
+    </form>
+</div>
+
+<!-- 恢复备份 -->
+<div class="card settings-card">
+    <h3 class="card-title">📥 恢复备份</h3>
+    <form method="post" action="/settings/restore" enctype="multipart/form-data"
+          onsubmit="return confirm('恢复将覆盖当前所有数据（数据库、上传文件、配置），且不可撤销。确定继续？');">
+        <div class="form-row">
+            <label>选择备份文件（.zip）</label>
+            <input type="file" name="backup" accept=".zip,application/zip" required>
+            <p class="settings-hint">
+                上传之前「下载完整备份」得到的 zip（跨电脑迁移：一台导出 → 拷贝 → 另一台导入）。
+                恢复前会自动备份当前数据，任一步失败自动回滚到恢复前状态。
+            </p>
+        </div>
+        <div class="form-actions">
+            <button type="submit" class="btn btn-danger">恢复数据</button>
+        </div>
+    </form>
+</div>
+
+<!-- 常规 -->
+<div class="card settings-card">
+    <h3 class="card-title">📋 常规</h3>
+    <form method="post" action="/settings/general">
+        <div class="form-row">
+            <label>每页显示条数</label>
+            <input type="number" name="page_size" min="5" max="200" value="{{ page_size }}">
+            <p class="settings-hint">影响列表页与搜索结果每页展示的数量。</p>
+        </div>
+        <div class="form-actions">
+            <button type="submit" class="btn btn-primary">保存常规设置</button>
+        </div>
+    </form>
+</div>
+
+<!-- 关于 -->
+<div class="card settings-card">
+    <h3 class="card-title">ℹ️ 关于</h3>
+    <table class="about-table">
+        <tr><td>应用名称</td><td>{{ app_name }}</td></tr>
+        <tr><td>版本</td><td>v{{ version }}</td></tr>
+        <tr><td>数据库路径</td><td><code>{{ db_health.db_path }}</code></td></tr>
+        <tr>
+            <td>数据库大小</td>
+            <td>
+                {% if db_health.db_size_bytes > 0 %}
+                {{ "%.1f"|format(db_health.db_size_bytes / 1024 / 1024) }} MB
+                {% else %}—{% endif %}
+            </td>
+        </tr>
+        <tr>
+            <td>数据库健康</td>
+            <td>
+                {% if db_health.status == 'ok' %}
+                <span class="status-ok">● 正常（integrity_check 通过）</span>
+                {% else %}
+                <span class="status-error">⚠ 异常：{{ db_health.integrity }}</span>
+                {% endif %}
+            </td>
+        </tr>
+    </table>
+</div>
+{% endblock %}
+
+{% block scripts %}
+{{ super() }}
+<script>
+/* 设置页：主题 radio 载入时按当前模式勾选 */
+(function () {
+    "use strict";
+    var mode = window.wbThemeMode ? window.wbThemeMode() : "system";
+    var radios = document.querySelectorAll('#theme-picker input[name="theme"]');
+    for (var i = 0; i < radios.length; i++) {
+        if (radios[i].value === mode) radios[i].checked = true;
+    }
+})();
+
+/* 桌面 App（Tauri）：原生目录选择对话框；web 版无 __TAURI__ 则隐藏按钮 */
+(function () {
+    "use strict";
+    var hasDialog = window.__TAURI__ && window.__TAURI__.dialog &&
+                    typeof window.__TAURI__.dialog.open === "function";
+    var btns = document.querySelectorAll(".browse-btn");
+    if (!hasDialog) {
+        for (var i = 0; i < btns.length; i++) btns[i].style.display = "none";
+        return;
+    }
+    for (var j = 0; j < btns.length; j++) {
+        (function (btn) {
+            btn.addEventListener("click", function () {
+                window.__TAURI__.dialog.open({ directory: true, multiple: false })
+                    .then(function (picked) {
+                        if (picked) {
+                            var input = document.getElementById(btn.dataset.target);
+                            if (input) input.value = picked;
+                        }
+                    })
+                    .catch(function () {});
+            });
+        })(btns[j]);
+    }
+})();
+</script>
+{% endblock %}

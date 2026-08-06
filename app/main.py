@@ -13,7 +13,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
 
-from app.config import BASE_DIR, settings
+from app.config import APP_VERSION, BASE_DIR, settings
 from app.database import init_db
 from app.routes import api as api_routes
 from app.routes import pages as page_routes
@@ -32,7 +32,7 @@ async def lifespan(app: FastAPI):
 app = FastAPI(
     title=settings.app_name,
     description="个人实验 / 项目跟踪工作台。",
-    version="0.2.0",
+    version=APP_VERSION,
     lifespan=lifespan,
 )
 

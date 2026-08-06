@@ -22,8 +22,12 @@ URL 设计：
 
 from __future__ import annotations
 
+import os
+import shutil
+import tempfile
 from datetime import datetime
 from pathlib import Path
+from urllib.parse import quote
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Request, UploadFile
 from fastapi.responses import HTMLResponse, RedirectResponse
@@ -31,8 +35,9 @@ from fastapi.templating import Jinja2Templates
 from sqlalchemy.orm import Session
 
 from app import crud, models, schemas
-from app.config import settings
+from app.config import APP_VERSION, save_setting, settings
 from app.database import get_db
+from app.services import settings_service
 
 # ---------------------------------------------------------------------------
 # 模板 & 自定义过滤器
@@ -1079,7 +1084,11 @@ def search_page(
     追加正文 LIKE 扫全表。个人数据量小，毫秒级返回。
     """
     query = q.strip()
-    groups = crud.search_all(db, query, fulltext=bool(fulltext)) if query else []
+    groups = (
+        crud.search_all(db, query, fulltext=bool(fulltext), limit=settings.page_size)
+        if query
+        else []
+    )
     total = sum(len(g["items"]) for g in groups)
     return render(
         request, "search.html",
@@ -1093,9 +1102,9 @@ def search_page(
     )
 
 
-_PLACEHOLDER_PAGES = [
-    ("settings", "⚙️", "设置", "主题、标签、导入导出 — 后续接入"),
-]
+# 设置模块已是真实页面（见下），占位页注册列表置空。
+# placeholder.html 保留供未来可能的新占位页使用。
+_PLACEHOLDER_PAGES: list = []
 
 
 for _key, _icon, _title, _desc in _PLACEHOLDER_PAGES:
@@ -1114,3 +1123,95 @@ for _key, _icon, _title, _desc in _PLACEHOLDER_PAGES:
         f"/{_key}", _make_page(), methods=["GET"],
         response_class=HTMLResponse,
     )
+
+
+# ---------------------------------------------------------------------------
+# 设置
+# ---------------------------------------------------------------------------
+
+
+@router.get("/settings", response_class=HTMLResponse)
+def settings_page(request: Request):
+    """设置页：外观 / 数据与存储 / 常规 / 关于。
+
+    saved / error 用 query param 传递（POST 后 303 重定向回来），
+    是项目无 flash 机制下的轻量替代。
+    """
+    health = settings_service.get_db_health()
+    return render(
+        request, "settings.html",
+        {
+            "active_nav": "settings",
+            "saved": request.query_params.get("saved"),
+            "error": request.query_params.get("error"),
+            "db_path": settings.db_path,
+            "artifact_dir": settings.artifact_dir,
+            "max_upload_size_mb": settings.max_upload_size_mb,
+            "app_name": settings.app_name,
+            "page_size": settings.page_size,
+            "version": APP_VERSION,
+            "db_health": health,
+        },
+    )
+
+
+@router.post("/settings/storage")
+def update_storage(
+    db_path: str = Form(...),
+    artifact_dir: str = Form(...),
+    max_upload_size_mb: int = Form(100, ge=1, le=2048),
+):
+    """保存存储设置；路径变更时自动迁移（先复制后删除，失败回滚）。
+
+    先对 db + artifact 两项目标统一预检（可写/已存在/嵌套），
+    全部通过才执行迁移，避免 db 已迁而 artifact 目标不可写的半迁移。
+    """
+    try:
+        settings_service.preflight_migrations(db_path, artifact_dir)
+        if settings_service.get_db_path() != settings_service.resolve_user_path(db_path):
+            settings_service.migrate_db(db_path)
+        if settings_service.resolve_user_path(settings.artifact_dir) != settings_service.resolve_user_path(artifact_dir):
+            settings_service.migrate_artifact_dir(artifact_dir)
+        if max_upload_size_mb != settings.max_upload_size_mb:
+            save_setting("max_upload_size_mb", max_upload_size_mb)
+    except settings_service.SettingsError as exc:
+        return RedirectResponse(f"/settings?error={quote(str(exc))}", status_code=303)
+    return RedirectResponse("/settings?saved=storage", status_code=303)
+
+
+@router.post("/settings/general")
+def update_general(
+    page_size: int = Form(20, ge=5, le=200),
+):
+    # 应用名称是固定属性（经 .env 的 WORKBENCH_APP_NAME 启动时设置），不在 UI 编辑
+    save_setting("page_size", page_size)
+    return RedirectResponse("/settings?saved=general", status_code=303)
+
+
+@router.post("/settings/restore")
+def restore_settings(backup: UploadFile = File(...)):
+    """从备份 zip 一键恢复全部数据（数据库 + 上传文件 + 配置）。
+
+    不加 Depends(get_db)：restore 会替换数据库文件，持有旧 engine 的 session
+    在 Windows 上会导致文件被占用而替换失败。
+    """
+    if not backup.filename or not backup.filename.lower().endswith(".zip"):
+        return RedirectResponse(
+            f"/settings?error={quote('请选择 .zip 备份包')}", status_code=303
+        )
+    fd, tmp = tempfile.mkstemp(prefix="wb-upload-", suffix=".zip")
+    try:
+        with os.fdopen(fd, "wb") as out:
+            shutil.copyfileobj(backup.file, out)  # 流式落盘，不整包进内存
+        settings_service.restore_backup(Path(tmp))
+    except settings_service.SettingsError as exc:
+        return RedirectResponse(
+            f"/settings?error={quote(str(exc))}", status_code=303
+        )
+    except OSError as exc:
+        return RedirectResponse(
+            f"/settings?error={quote(f'上传保存失败：{exc}')}", status_code=303
+        )
+    finally:
+        Path(tmp).unlink(missing_ok=True)
+    return RedirectResponse("/settings?saved=restore", status_code=303)

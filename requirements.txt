@@ -15,6 +15,8 @@ python-multipart>=0.0.12
 markdown>=3.7
 pydantic>=2.10
 pydantic-settings>=2.7
+# 设置页写回 .env（持久化用户设置）需要
+python-dotenv>=1.0
 
 # 仅 scripts/example_log.py(从训练脚本推送数据的示例)需要。
 # 不跑那个示例的话用不上,但装着也无妨。

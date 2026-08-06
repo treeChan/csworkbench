@@ -12,20 +12,44 @@ FastAPI 中每个请求一个 Session。用法示例：
 """
 
 from collections.abc import Generator
+from pathlib import Path
 
-from sqlalchemy import create_engine, text
+from sqlalchemy import create_engine, event, text
 from sqlalchemy.orm import DeclarativeBase, Session, sessionmaker
 
 from app.config import get_db_url
 
 
+def _attach_default_pragmas(target_engine) -> None:
+    """给 engine 的每个连接设默认 PRAGMA。
+
+    busy_timeout：SQLite 默认锁等待立即失败，并发写会报 database is locked。
+    迁移/备份期间其他请求可能短暂占锁，设 5s 等待窗口能避免偶发报错。
+    """
+
+    @event.listens_for(target_engine, "connect")
+    def _set_pragmas(dbapi_conn, _rec):
+        cur = dbapi_conn.cursor()
+        try:
+            cur.execute("PRAGMA busy_timeout=5000")
+        finally:
+            cur.close()
+
+
+def _build_engine(db_url: str):
+    """创建带默认 PRAGMA 的 engine。"""
+    new_engine = create_engine(
+        db_url,
+        echo=False,  # True 会打印所有 SQL，调试时打开
+        connect_args={"check_same_thread": False},
+        future=True,
+    )
+    _attach_default_pragmas(new_engine)
+    return new_engine
+
+
 # 引擎：SQLite 需要 check_same_thread=False 允许多线程访问
-engine = create_engine(
-    get_db_url(),
-    echo=False,  # True 会打印所有 SQL，调试时打开
-    connect_args={"check_same_thread": False},
-    future=True,
-)
+engine = _build_engine(get_db_url())
 
 # Session 工厂
 SessionLocal = sessionmaker(
@@ -49,6 +73,37 @@ def get_db() -> Generator[Session, None, None]:
         yield db
     finally:
         db.close()
+
+
+def rebuild_engine(db_path: Path) -> None:
+    """把全局 engine / SessionLocal 热切换到另一个 SQLite 库。
+
+    用于设置页「更改数据库路径」后立即生效、无需重启。
+    由于 engine / SessionLocal 都是模块级变量，get_db() 每次调用读的是
+    模块属性当前值，因此这里同时替换两个变量即可，所有调用方零改动：
+      - crud.py 全通过 `db: Session` 参数（由 get_db 注入）
+      - pages.render() 在函数内 `from app.database import SessionLocal`
+      - init_db() / _migrate_2026_08_05() 用 engine
+    先对新库 SELECT 1 验证可连，再原子替换；替换前旧 engine 一直可用。
+    """
+    global engine, SessionLocal
+
+    new_engine = _build_engine(f"sqlite:///{db_path}")
+    new_session = sessionmaker(
+        bind=new_engine,
+        autocommit=False,
+        autoflush=False,
+        expire_on_commit=False,
+        future=True,
+    )
+    # 验证新库可连接；失败抛异常，调用方据此回滚配置
+    with new_engine.connect() as conn:
+        conn.execute(text("SELECT 1"))
+
+    old_engine = engine
+    engine = new_engine       # GIL 保证赋值原子
+    SessionLocal = new_session
+    old_engine.dispose()      # 关闭旧连接池（checkout 中的连接返回后即关）
 
 
 # ---------------------------------------------------------------------------
