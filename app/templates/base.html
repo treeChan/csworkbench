@@ -26,8 +26,7 @@
     <div class="topbar-left">
         <div class="project-switcher">
             <span class="rocket">🚀</span>
-            <span class="brand">Workbench</span>
-            <span class="brand-sub">研究驾驶舱</span>
+            <span class="brand">研究驾驶舱</span>
         </div>
         <select class="project-select" onchange="if(this.value) location.href=this.value">
             <option value="/projects"
@@ -68,6 +67,7 @@
             </div>
         </div>
         <button class="icon-btn" id="theme-toggle" title="切换主题">🌙</button>
+        <a class="icon-btn" href="/settings" title="设置" aria-label="设置">⚙️</a>
     </div>
 </header>
 
@@ -78,29 +78,15 @@
     <nav class="sidebar">
         <ul class="nav-list">
             <li class="nav-item {% if active_nav == 'today' %}active{% endif %}">
-                <a href="/"><span class="nav-icon">🏠</span> 今日</a>
+                <a href="/"><span class="nav-icon">⏰</span> <span class="nav-label">今日</span></a>
             </li>
             <li class="nav-item {% if active_nav == 'projects' %}active{% endif %}">
-                <a href="/projects"><span class="nav-icon">📁</span> 研究项目</a>
-            </li>
-            <li class="nav-item {% if active_nav == 'simulations' %}active{% endif %}">
-                <a href="/cases"><span class="nav-icon">🧪</span> 仿真与试验</a>
-            </li>
-            <li class="nav-item {% if active_nav == 'files' %}active{% endif %}">
-                <a href="/files"><span class="nav-icon">📦</span> 文件与成果</a>
+                <a href="/projects"><span class="nav-icon">📁</span> <span class="nav-label">项目</span></a>
             </li>
             <li class="nav-item {% if active_nav == 'review' %}active{% endif %}">
-                <a href="/review"><span class="nav-icon">📅</span> 周复盘</a>
+                <a href="/review"><span class="nav-icon">📅</span> <span class="nav-label">周复盘</span></a>
             </li>
         </ul>
-
-        <div class="sidebar-bottom">
-            <ul class="nav-list">
-                <li class="nav-item {% if active_nav == 'settings' %}active{% endif %}">
-                    <a href="/settings"><span class="nav-icon">⚙️</span> 设置</a>
-                </li>
-            </ul>
-        </div>
     </nav>
 
     <!-- 中间主区 -->
@@ -167,7 +153,7 @@
 
 <!-- =================== 底部状态栏 =================== -->
 <footer class="statusbar">
-    <span class="status-item">📦 本地模式（数据仅保存在本机）</span>
+    <span class="status-item">🚀 Workbench</span>
     <span class="status-item status-ok">● 数据库健康：正常</span>
     <span class="status-item">✓ 自动保存已开启</span>
     <span class="status-right">

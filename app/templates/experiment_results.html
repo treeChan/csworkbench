@@ -103,8 +103,7 @@
         <h3>📎 文件与成果 <small style="color: var(--c-text-soft); font-weight: normal;">({{ artifacts|length }} 个)</small></h3>
     </div>
     <p class="muted" style="font-size: 12px; margin: 0 0 10px;">
-        上传结果图、示意图、模型权重（.pt / .pth / .onnx 等）。也可在
-        <a href="/files">「文件与成果」</a> 页面按项目 / 大目标 / 实验统一管理。
+        上传结果图、示意图、模型权重（.pt / .pth / .onnx 等）。文件跟随所属实验 / 项目保留在本页及项目详情页。
     </p>
 
     <form method="post" action="/experiments/{{ experiment.id }}/artifacts"

@@ -33,7 +33,6 @@ from sqlalchemy.orm import Session
 from app import crud, models, schemas
 from app.config import settings
 from app.database import get_db
-from sqlalchemy import select
 
 # ---------------------------------------------------------------------------
 # 模板 & 自定义过滤器
@@ -385,37 +384,6 @@ def add_quick_record(
     )
     # 回到发起页（Referer），否则回到项目详情
     return RedirectResponse(f"/projects/{project_id}", status_code=303)
-
-
-# ---------------------------------------------------------------------------
-# 占位导航页面（避免侧栏点击 404，后续按需扩展）
-# ---------------------------------------------------------------------------
-
-
-_PLACEHOLDER_PAGES = [
-    ("cases", "🧪", "仿真与试验", "工况矩阵、参数扫描、试验数据汇总 — 后续接入"),
-    ("files", "📦", "文件与成果", "数据、模型权重、图表、附件 — 后续接入"),
-    ("review", "📅", "周复盘", "每周回顾、关键指标、卡点 — 后续接入"),
-    ("settings", "⚙️", "设置", "主题、标签、导入导出 — 后续接入"),
-]
-
-
-for _key, _icon, _title, _desc in _PLACEHOLDER_PAGES:
-
-    def _make_page(key: str = _key, icon: str = _icon,
-                   title: str = _title, desc: str = _desc):
-        def _page(request: Request) -> HTMLResponse:
-            return render(
-                request, "placeholder.html",
-                {"active_nav": key, "page_icon": icon,
-                 "page_title": title, "page_desc": desc},
-            )
-        return _page
-
-    router.add_api_route(
-        f"/{_key}", _make_page(), methods=["GET"],
-        response_class=HTMLResponse,
-    )
 
 
 # ---------------------------------------------------------------------------
@@ -908,51 +876,13 @@ def delete_artifact_page(
         target = f"/experiments/{art.experiment_id}/results"
     elif art.goal_id:
         goal = crud.get_goal(db, art.goal_id)
-        target = f"/projects/{goal.project_id}" if goal else "/files"
+        target = f"/projects/{goal.project_id}" if goal else "/"
     elif art.project_id:
         target = f"/projects/{art.project_id}"
     else:
-        target = "/files"
+        target = "/"
     crud.delete_artifact(db, art)
     return RedirectResponse(target, status_code=303)
-
-
-# ---------------------------------------------------------------------------
-# 文件与成果总览页 /files
-# ---------------------------------------------------------------------------
-
-
-@router.get("/files", response_class=HTMLResponse)
-def files_overview(request: Request, db: Session = Depends(get_db)) -> HTMLResponse:
-    """文件与成果总览：按归属（项目 / 大目标 / 实验）分组列出。"""
-    artifacts = crud.list_artifacts(db)
-    projects = {p.id: p for p in crud.list_projects(db)}
-    goals = {g.id: g for g in db.scalars(select(models.Goal)).all()}
-
-    grouped: dict[str, list[models.Artifact]] = {
-        "project": [], "goal": [], "experiment": [],
-    }
-    for a in artifacts:
-        if a.project_id:
-            grouped["project"].append(a)
-        elif a.goal_id:
-            grouped["goal"].append(a)
-        elif a.experiment_id:
-            grouped["experiment"].append(a)
-
-    total_bytes = sum(a.size_bytes for a in artifacts)
-    return render(
-        request, "files.html",
-        {
-            "active_nav": "files",
-            "artifacts": artifacts,
-            "projects": projects,
-            "goals": goals,
-            "grouped": grouped,
-            "total_count": len(artifacts),
-            "total_bytes": total_bytes,
-        },
-    )
 
 
 # ---------------------------------------------------------------------------
@@ -1164,7 +1094,6 @@ def search_page(
 
 
 _PLACEHOLDER_PAGES = [
-    ("cases", "🧪", "仿真与试验", "工况矩阵、参数扫描、试验数据汇总 — 后续接入"),
     ("settings", "⚙️", "设置", "主题、标签、导入导出 — 后续接入"),
 ]
 

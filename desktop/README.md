@@ -65,7 +65,7 @@ curl 127.0.0.1:<打印的端口>/health
 
 ### 方式一：GitHub Actions（推荐，三平台）
 
-1. 在仓库根打 tag 并推送：`git tag v0.1.0 && git push origin v0.1.0`
+1. 在仓库根打 tag 并推送：`git tag v0.2.0 && git push origin v0.2.0`
 2. `.github/workflows/build-desktop.yml` 的矩阵会在 macOS / Windows / Linux
    三个 runner 上各自构建 sidecar + 安装包
 3. 产物出现在 **draft Release** 和 workflow artifacts 里
