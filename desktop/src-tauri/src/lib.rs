@@ -53,6 +53,9 @@ pub fn run() {
                 .shell()
                 .sidecar("workbench-server")
                 .map_err(|e| e.to_string())?
+                // 把 appdata 目录传给 sidecar:它的用户设置持久层(WORKBENCH_APP_DATA_DIR/.env)
+                // 写在这里,重启后从这里读回,实现"设置页改路径跨重启生效"。
+                .env("WORKBENCH_APP_DATA_DIR", dir.to_string_lossy().into_owned())
                 .args(vec![
                     "--db".into(),
                     db.to_string_lossy().into_owned(),

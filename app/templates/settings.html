@@ -14,45 +14,57 @@
 {% if saved %}
 <div class="alert alert-success">
     <strong>已保存。</strong>
-    {% if saved == 'storage' %}存储设置已更新（路径迁移已完成）。{% elif saved == 'general' %}常规设置已更新。{% endif %}
+    {% if saved == 'storage' %}存储设置已更新（路径迁移已完成）。{% elif saved == 'general' %}常规设置已更新。{% elif saved == 'restore' %}备份已恢复，数据已全部还原。{% endif %}
 </div>
 {% endif %}
+<div id="page-notice" style="display:none"></div>
 
-<!-- 外观 -->
+<!-- 常规（最前）：主题 + 每页条数 -->
 <div class="card settings-card">
-    <h3 class="card-title">🎨 外观</h3>
-    <div class="form-row">
-        <label>主题</label>
-        <div class="theme-picker" id="theme-picker">
-            <label class="theme-option">
-                <input type="radio" name="theme" value="system" onchange="wbSetTheme('system')">
-                跟随系统
-            </label>
-            <label class="theme-option">
-                <input type="radio" name="theme" value="light" onchange="wbSetTheme('light')">
-                亮色
-            </label>
-            <label class="theme-option">
-                <input type="radio" name="theme" value="dark" onchange="wbSetTheme('dark')">
-                暗色
-            </label>
+    <h3 class="card-title">📋 常规</h3>
+    <form method="post" action="/settings/general">
+        <div class="form-row">
+            <label>主题</label>
+            <div class="theme-picker" id="theme-picker">
+                <label class="theme-option">
+                    <input type="radio" name="theme" value="system" onchange="wbSetTheme('system')">
+                    跟随系统
+                </label>
+                <label class="theme-option">
+                    <input type="radio" name="theme" value="light" onchange="wbSetTheme('light')">
+                    亮色
+                </label>
+                <label class="theme-option">
+                    <input type="radio" name="theme" value="dark" onchange="wbSetTheme('dark')">
+                    暗色
+                </label>
+            </div>
+            <p class="settings-hint">主题保存在本机浏览器；「跟随系统」会随系统外观自动切换。</p>
         </div>
-    </div>
-    <p class="settings-hint">主题保存在本机浏览器；「跟随系统」会随系统外观自动切换。</p>
+        <div class="form-row">
+            <label>每页显示条数</label>
+            <input type="number" name="page_size" min="5" max="200" value="{{ page_size }}">
+            <p class="settings-hint">影响列表页与搜索结果每页展示的数量。</p>
+        </div>
+        <div class="form-actions">
+            <button type="submit" class="btn btn-primary">保存常规设置</button>
+        </div>
+    </form>
 </div>
 
-<!-- 数据与存储 -->
+<!-- 数据与存储：路径 + 备份 + 恢复（都是对文件的操作，合并一块） -->
 <div class="card settings-card">
     <h3 class="card-title">💾 数据与存储</h3>
     <form method="post" action="/settings/storage">
         <div class="form-row">
-            <label>数据库文件路径</label>
+            <label>数据库文件夹</label>
             <div class="path-input-row">
-                <input type="text" name="db_path" id="db_path" value="{{ db_path }}" required
-                       placeholder="data/workbench.db">
+                <input type="text" name="db_path" id="db_path" value="{{ db_dir }}" required
+                       placeholder="data">
                 <button type="button" class="btn btn-outline browse-btn" data-target="db_path">浏览…</button>
             </div>
             <p class="settings-hint">
+                选文件夹即可，数据库保存在该文件夹下的 workbench.db 文件（不必记住文件名）。
                 支持相对路径、绝对路径、~ 家目录。修改后自动迁移：先复制并校验完整性、
                 再切换到新库、成功后删除旧库；任一步失败自动回滚原配置。
             </p>
@@ -73,41 +85,25 @@
         </div>
         <div class="form-actions">
             <button type="submit" class="btn btn-primary">保存存储设置</button>
-            <a href="/api/settings/backup" class="btn btn-outline">⬇ 下载完整备份</a>
+            <button type="button" class="btn btn-outline" id="download-backup">⬇ 下载完整备份</button>
         </div>
     </form>
-</div>
 
-<!-- 恢复备份 -->
-<div class="card settings-card">
-    <h3 class="card-title">📥 恢复备份</h3>
+    <hr class="settings-divider">
+
+    <h4 class="card-subtitle">📥 恢复备份（一键导入 / 跨电脑迁移）</h4>
     <form method="post" action="/settings/restore" enctype="multipart/form-data"
           onsubmit="return confirm('恢复将覆盖当前所有数据（数据库、上传文件、配置），且不可撤销。确定继续？');">
         <div class="form-row">
             <label>选择备份文件（.zip）</label>
             <input type="file" name="backup" accept=".zip,application/zip" required>
             <p class="settings-hint">
-                上传之前「下载完整备份」得到的 zip（跨电脑迁移：一台导出 → 拷贝 → 另一台导入）。
-                恢复前会自动备份当前数据，任一步失败自动回滚到恢复前状态。
+                上传另一台机器「下载完整备份」得到的 zip，即可把全部数据一键恢复到这台机器。
+                恢复目标是本机当前设置的路径；恢复前自动备份当前数据，任一步失败自动回滚。
             </p>
         </div>
         <div class="form-actions">
             <button type="submit" class="btn btn-danger">恢复数据</button>
-        </div>
-    </form>
-</div>
-
-<!-- 常规 -->
-<div class="card settings-card">
-    <h3 class="card-title">📋 常规</h3>
-    <form method="post" action="/settings/general">
-        <div class="form-row">
-            <label>每页显示条数</label>
-            <input type="number" name="page_size" min="5" max="200" value="{{ page_size }}">
-            <p class="settings-hint">影响列表页与搜索结果每页展示的数量。</p>
-        </div>
-        <div class="form-actions">
-            <button type="submit" class="btn btn-primary">保存常规设置</button>
         </div>
     </form>
 </div>
@@ -152,6 +148,63 @@
     for (var i = 0; i < radios.length; i++) {
         if (radios[i].value === mode) radios[i].checked = true;
     }
+})();
+
+/* 页面内提示条（下载反馈用，替代 alert 打断） */
+(function () {
+    "use strict";
+    var noticeEl = document.getElementById("page-notice");
+    window.showNotice = function (html, isError) {
+        if (!noticeEl) { alert(html); return; }
+        noticeEl.innerHTML = html;
+        noticeEl.className = "alert " + (isError ? "alert-error" : "alert-success");
+        noticeEl.style.display = "block";
+        clearTimeout(window.showNotice._t);
+        window.showNotice._t = setTimeout(function () {
+            noticeEl.style.display = "none";
+        }, isError ? 8000 : 10000);
+    };
+})();
+
+/* 下载完整备份：前端触发，让用户明确知道保存到哪了 */
+(function () {
+    "use strict";
+    var dlBtn = document.getElementById("download-backup");
+    if (!dlBtn) return;
+    dlBtn.addEventListener("click", function () {
+        var btn = this;
+        btn.disabled = true;
+        var oldText = btn.textContent;
+        btn.textContent = "正在打包…";
+        fetch("/api/settings/backup")
+            .then(function (resp) {
+                if (!resp.ok) throw new Error("HTTP " + resp.status);
+                var cd = resp.headers.get("Content-Disposition") || "";
+                var m = cd.match(/filename="?([^";]+)"?/i);
+                var name = m ? m[1] : "workbench-backup.zip";
+                return resp.blob().then(function (blob) {
+                    return { blob: blob, name: name };
+                });
+            })
+            .then(function (r) {
+                var url = URL.createObjectURL(r.blob);
+                var a = document.createElement("a");
+                a.href = url;
+                a.download = r.name;
+                document.body.appendChild(a);
+                a.click();
+                a.remove();
+                setTimeout(function () { URL.revokeObjectURL(url); }, 5000);
+                window.showNotice("已开始下载：<b>" + r.name + "</b>。<br>保存在系统默认的「下载」文件夹（桌面版点系统下载图标 / 浏览器可查下载记录）。");
+            })
+            .catch(function (e) {
+                window.showNotice("下载失败：" + e, true);
+            })
+            .finally(function () {
+                btn.disabled = false;
+                btn.textContent = oldText;
+            });
+    });
 })();
 
 /* 桌面 App（Tauri）：原生目录选择对话框；web 版无 __TAURI__ 则隐藏按钮 */

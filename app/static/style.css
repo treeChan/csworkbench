@@ -1023,6 +1023,9 @@ button.pipeline-step:focus { outline: 2px solid var(--c-primary-light); outline-
    ================================================================= */
 
 .settings-card { max-width: 720px; }
+.settings-card .form-row { margin-bottom: 18px; }
+.settings-divider { border: none; border-top: 1px solid var(--c-border); margin: 20px 0; }
+.card-subtitle { margin: 0 0 14px; font-size: 14px; font-weight: 600; color: var(--c-text); }
 
 .theme-picker { display: flex; gap: 10px; flex-wrap: wrap; }
 .theme-option {

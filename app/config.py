@@ -8,6 +8,7 @@
     print(settings.db_path)
 """
 
+import os
 from pathlib import Path
 
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -17,10 +18,19 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 BASE_DIR = Path(__file__).resolve().parent.parent
 
 # 当前应用版本（main.py 的 FastAPI version 与桌面端 tauri/Cargo 与此保持一致）
-APP_VERSION = "0.3.0"
+APP_VERSION = "0.3.1"
 
 # 用户设置持久化文件（设置页写回这里；pydantic-settings 启动时读取）
-ENV_FILE = BASE_DIR / ".env"
+#
+# 网页版：项目根 /.env
+# 桌面版：sidecar 由 Rust 宿主通过 WORKBENCH_APP_DATA_DIR 环境变量传入 appdata 目录，
+#         用户设置写到 <appdata>/.env。原因：PyInstaller 里 BASE_DIR 是临时解压目录，
+#         .env 写那里每次重启就丢；且 WORKBENCH_DB_PATH 环境变量优先级高于 .env，
+#         必须让 appdata/.env 成为新的持久层，才能让「设置页改路径」跨重启生效。
+USER_ENV_FILE = Path(os.environ.get("WORKBENCH_APP_DATA_DIR") or BASE_DIR) / ".env"
+
+# 兼容旧引用（settings_service 直接用它做恢复时的快照 / 回滚）
+ENV_FILE = USER_ENV_FILE
 
 
 class Settings(BaseSettings):
@@ -50,7 +60,7 @@ class Settings(BaseSettings):
 
     model_config = SettingsConfigDict(
         env_prefix="WORKBENCH_",  # 环境变量前缀
-        env_file=BASE_DIR / ".env",
+        env_file=str(USER_ENV_FILE),
         env_file_encoding="utf-8",
         extra="ignore",
     )
@@ -132,5 +142,7 @@ def save_setting(key: str, value) -> None:
     """
     from dotenv import set_key  # 惰性导入，桌面端缺依赖时仅设置页报错
 
-    set_key(ENV_FILE, f"WORKBENCH_{key.upper()}", str(value))
+    # 桌面端持久层在 appdata 下，目录未必存在，先建好（dotenv 要在同目录写临时文件）
+    USER_ENV_FILE.parent.mkdir(parents=True, exist_ok=True)
+    set_key(USER_ENV_FILE, f"WORKBENCH_{key.upper()}", str(value))
     setattr(settings, key, value)

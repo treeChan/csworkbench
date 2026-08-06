@@ -27,6 +27,17 @@ import threading
 from pathlib import Path
 
 
+def _load_persist_env(app_data_dir: Path) -> dict:
+    """读 appdata/.env（用户设置持久层）。读不到就当空字典。"""
+    try:
+        from dotenv import dotenv_values
+
+        vals = dotenv_values(app_data_dir / ".env")
+        return {str(k): str(v) for k, v in (vals or {}).items() if v}
+    except Exception:
+        return {}
+
+
 def pick_port(preferred: int) -> int:
     """从 preferred 开始向后找一个可绑定的端口。"""
     for off in range(64):
@@ -49,7 +60,16 @@ def main() -> None:
     ap.add_argument("--artifacts", default=None, help="上传文件的持久化根目录")
     a = ap.parse_args()
 
-    db = Path(a.db).expanduser().resolve()
+    # ---- 持久化设置层 ----
+    # 桌面端由 Rust 宿主通过 WORKBENCH_APP_DATA_DIR 传入 appdata 目录:
+    #   1) 若 appdata/.env 已有用户设置(设置页改过的路径/配置),以它为准覆盖 --db 参数
+    #   2) 首次启动时把当前生效路径写入,让设置页改路径后能跨重启保存
+    # (PyInstaller 里 BASE_DIR 是临时解压目录,.env 写那里重启就丢)
+    app_data_dir = os.environ.get("WORKBENCH_APP_DATA_DIR")
+    persist = _load_persist_env(Path(app_data_dir)) if app_data_dir else {}
+
+    db_raw = persist.get("WORKBENCH_DB_PATH") or a.db
+    db = Path(db_raw).expanduser().resolve()
     db.parent.mkdir(parents=True, exist_ok=True)
 
     # ---- 必须在 import app 之前 ----
@@ -62,10 +82,31 @@ def main() -> None:
 
     os.environ["WORKBENCH_DB_PATH"] = str(db)
     os.environ.setdefault("WORKBENCH_APP_NAME", "Workbench")
-    if a.artifacts:
-        art = Path(a.artifacts).expanduser().resolve()
+    art_raw = persist.get("WORKBENCH_ARTIFACT_DIR") or a.artifacts
+    if art_raw:
+        art = Path(art_raw).expanduser().resolve()
         art.mkdir(parents=True, exist_ok=True)
         os.environ["WORKBENCH_ARTIFACT_DIR"] = str(art)
+    else:
+        art = None
+
+    # 非路径配置(page_size 等)透传给 settings;显式环境变量 > appdata/.env
+    for _k, _v in persist.items():
+        if _k not in ("WORKBENCH_DB_PATH", "WORKBENCH_ARTIFACT_DIR"):
+            os.environ.setdefault(_k, _v)
+
+    # 首次启动:把当前生效路径持久化,设置页改路径后才能覆盖
+    if app_data_dir and not persist.get("WORKBENCH_DB_PATH"):
+        try:
+            lines = [f"WORKBENCH_DB_PATH={db}"]
+            if art:
+                lines.append(f"WORKBENCH_ARTIFACT_DIR={art}")
+            Path(app_data_dir).mkdir(parents=True, exist_ok=True)
+            (Path(app_data_dir) / ".env").write_text(
+                "\n".join(lines) + "\n", encoding="utf-8"
+            )
+        except Exception:
+            pass
 
     port = pick_port(a.port if a.port > 0 else 8750)
     handshake = json.dumps({"status": "ready", "port": port})

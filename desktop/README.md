@@ -51,7 +51,7 @@ stdin 到 EOF 就自杀（宿主退出 → 管道关闭）；③ 单实例插件
 | 参数 | `--db <workbench.db 绝对路径>` `--port <首选端口，默认 8750>` `--port-file <握手文件>` `--artifacts <上传文件根目录>` |
 | stdout | 就绪后只输出一行 `{"status":"ready","port":N}`（uvicorn 日志走 stderr） |
 | stdin | 读到 EOF 即退出（宿主导出兜底） |
-| 数据路径 | 通过环境变量 `WORKBENCH_DB_PATH` 传给 FastAPI；上传文件目录走 `WORKBENCH_ARTIFACT_DIR`（都在 `import app` 之前设置，必须指向持久化目录——PyInstaller 的 BASE_DIR 是临时解压目录）。注意：环境变量优先级高于 `.env`，所以桌面端在设置页改数据库路径只在本进程内生效，重启 App 后回到 `--db` 指定的库（网页版无此限制） |
+| 数据路径 | 通过环境变量 `WORKBENCH_DB_PATH` 传给 FastAPI；上传文件目录走 `WORKBENCH_ARTIFACT_DIR`（都在 `import app` 之前设置，必须指向持久化目录——PyInstaller 的 BASE_DIR 是临时解压目录）。桌面端由宿主额外传入 `WORKBENCH_APP_DATA_DIR`（appdata 目录）：用户设置持久化到 `<appdata>/.env`，启动时若其中有数据库/上传路径则以它为准覆盖 `--db`/`--artifacts`，实现「设置页改路径跨重启生效」 |
 
 桌面端设置页的「浏览…」按钮用 `tauri-plugin-dialog` 弹**原生目录选择器**（三平台统一
 API，一次开发通用），选中的目录绝对路径填回输入框；web 版（浏览器）拿不到文件系统
@@ -71,7 +71,7 @@ curl 127.0.0.1:<打印的端口>/health
 
 ### 方式一：GitHub Actions（推荐，三平台）
 
-1. 在仓库根打 tag 并推送：`git tag v0.3.0 && git push origin v0.3.0`
+1. 在仓库根打 tag 并推送：`git tag v0.3.1 && git push origin v0.3.1`
 2. `.github/workflows/build-desktop.yml` 的矩阵会在 macOS / Windows / Linux
    三个 runner 上各自构建 sidecar + 安装包
 3. 产物出现在 **draft Release** 和 workflow artifacts 里
@@ -150,7 +150,9 @@ Rust 侧用 `app.path().app_data_dir()` 决定，数据自动创建：
 | Windows | `%APPDATA%\com.csworkbench.desktop\` |
 | Linux | `$XDG_DATA_HOME` 或 `~/.local/share/com.csworkbench.desktop/` |
 
-数据库文件固定为 `workbench.db`。跟浏览器版是两份独立数据；想迁移直接拷 `.db` 文件。
+数据库默认文件为 `workbench.db`（可在设置页 → 数据与存储 更改数据库文件夹，
+自动持久化到 `<appdata>/.env`，重启 App 不丢）。跟浏览器版是两份独立数据；想迁移
+直接拷 `.db` 文件，或在设置页用「下载完整备份 / 恢复备份」一键跨电脑迁移。
 
 ## 已知限制 / 注意事项
 

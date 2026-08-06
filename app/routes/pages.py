@@ -1145,6 +1145,8 @@ def settings_page(request: Request):
             "saved": request.query_params.get("saved"),
             "error": request.query_params.get("error"),
             "db_path": settings.db_path,
+            # 输入框按「文件夹」语义展示：db 文件所在目录，保存时自动补 workbench.db
+            "db_dir": str(Path(settings.db_path).parent),
             "artifact_dir": settings.artifact_dir,
             "max_upload_size_mb": settings.max_upload_size_mb,
             "app_name": settings.app_name,
@@ -1163,9 +1165,15 @@ def update_storage(
 ):
     """保存存储设置；路径变更时自动迁移（先复制后删除，失败回滚）。
 
+    db_path 按「文件夹」理解：用户填的是存放数据库的目录（不必记得文件名），
+    自动在该目录下使用固定文件名 workbench.db；也兼容直接填完整 .db 路径。
     先对 db + artifact 两项目标统一预检（可写/已存在/嵌套），
     全部通过才执行迁移，避免 db 已迁而 artifact 目标不可写的半迁移。
     """
+    db_path = db_path.strip()
+    if not db_path.lower().endswith(".db"):
+        db_path = str(Path(db_path) / "workbench.db")
+    artifact_dir = artifact_dir.strip()
     try:
         settings_service.preflight_migrations(db_path, artifact_dir)
         if settings_service.get_db_path() != settings_service.resolve_user_path(db_path):

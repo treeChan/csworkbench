@@ -476,6 +476,7 @@ def _rollback_restore(engine, rollback: Path, old_db: Path, old_art: Path,
             old_art.mkdir(parents=True, exist_ok=True)
             shutil.copytree(rb_art, old_art, dirs_exist_ok=True)
         if rollback_env is not None:
+            ENV_FILE.parent.mkdir(parents=True, exist_ok=True)
             ENV_FILE.write_text(rollback_env, encoding="utf-8")
         elif ENV_FILE.exists():
             ENV_FILE.unlink()  # 原本没有 .env → 删掉恢复时新建的
@@ -490,7 +491,9 @@ def _rollback_restore(engine, rollback: Path, old_db: Path, old_art: Path,
 def restore_backup(zip_path: Path) -> dict:
     """从备份 zip 恢复全部数据（db + artifacts + 配置）。
 
-    跨电脑迁移：另一台机器上传备份 → 相对路径自动落到本机项目目录。
+    跨电脑迁移：另一台机器上传备份 → 数据落到**本机当前已设置的路径**
+    （备份包里记录的路径只用于打包时跨机通用，恢复时以目标机当前配置为准——
+    这台软件能正常运行，说明它当前配置的路径就是有效落点）。
     阶段0 解压校验（零副作用）→ 阶段1 快照当前状态（回滚基础）→
     阶段2 替换并生效；任一步失败整体回滚到恢复前。
     """
@@ -509,11 +512,11 @@ def restore_backup(zip_path: Path) -> dict:
             cfg = dotenv_values(cfg_src)
             db_raw = str(cfg.get("WORKBENCH_DB_PATH") or "").strip()
             _require(db_raw, "备份包 config.env 缺少 WORKBENCH_DB_PATH")
-            art_raw = str(cfg.get("WORKBENCH_ARTIFACT_DIR") or "data/artifacts").strip()
 
-            new_db = resolve_portable_path(db_raw)
-            new_art = resolve_portable_path(art_raw)
-            old_db, old_art = get_db_path(), get_artifact_dir()
+            # 恢复目标 = 本机当前配置的路径，而不是备份包里的相对路径。
+            new_db = get_db_path()
+            new_art = get_artifact_dir()
+            old_db, old_art = new_db, new_art
             _precheck_dir_writable(new_db.parent)
             _precheck_dir_writable(new_art)
             # 危险：后续 rmtree(new_art) 会波及刚恢复的 db —— db 文件不能在上传目录内
