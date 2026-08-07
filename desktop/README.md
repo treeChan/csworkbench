@@ -71,10 +71,28 @@ curl 127.0.0.1:<打印的端口>/health
 
 ### 方式一：GitHub Actions（推荐，三平台）
 
-1. 在仓库根打 tag 并推送：`git tag v0.3.1 && git push origin v0.3.1`
+1. 在仓库根打 tag 并推送：`git tag v0.4.0 && git push origin v0.4.0`
 2. `.github/workflows/build-desktop.yml` 的矩阵会在 macOS / Windows / Linux
    三个 runner 上各自构建 sidecar + 安装包
 3. 产物出现在 **draft Release** 和 workflow artifacts 里
+4. **updater 生效前提**：在线更新端点指向 `/releases/latest/download/latest.json`，
+   **draft Release 期间取不到**——发布时需把 draft 转正式 Release，应用内的
+   「检查更新」才能检测到新版。
+
+**更新机制（双轨）**：
+- **安装包覆盖升级（主路径，离线可用）**：Windows 安装包走自定义 NSIS 模板
+  （`src-tauri/nsis/installer.nsi`），同版本重装 / 版本升级时**直接覆盖安装，不再弹
+  「先卸载再安装」**；appdata 里的配置与数据原样保留（NSIS 卸载器默认也不删
+  `%APPDATA%`，只有卸载页勾选「删除数据」才删）。
+- **在线更新（补充，需联网）**：设置页「关于 → 检查更新」走 Tauri updater；
+  启动后也会静默检查一次，发现新版才弹提示。离线时静默失败，不影响使用。
+  签名密钥：`npm run tauri signer generate -w ~/.tauri/csworkbench.key` 生成，
+  公钥在 `tauri.conf.json` 的 `plugins.updater.pubkey`，私钥存 GitHub Secrets
+  （`TAURI_SIGNING_PRIVATE_KEY` / `TAURI_SIGNING_PRIVATE_KEY_PASSWORD`）。
+
+> ⚠️ 维护注意：`src-tauri/nsis/installer.nsi` 是自定义 NSIS 模板（基于 tauri-bundler
+> 默认模板改动）。升级 Tauri 版本时需对照新版模板同步，重点是文件内标注的
+> 「自定义」两处（PageReinstall 强制覆盖 + PageLeaveReinstall 双保险）。
 
 ### 方式二：本地构建（以 Linux 为例）
 
@@ -154,10 +172,22 @@ Rust 侧用 `app.path().app_data_dir()` 决定，数据自动创建：
 自动持久化到 `<appdata>/.env`，重启 App 不丢）。跟浏览器版是两份独立数据；想迁移
 直接拷 `.db` 文件，或在设置页用「下载完整备份 / 恢复备份」一键跨电脑迁移。
 
+## 签名与分发（免费开源软件的选项）
+
+| 平台 | 是否需要付费证书 | 说明 |
+|---|---|---|
+| macOS | 建议（Apple Developer 会员 $99/年） | 用 **Developer ID 证书签名 + 公证**后即可从 GitHub Releases / 官网直接分发，**不必上架 Mac App Store**（Homebrew 等大量开源工具都走这条）。公证本身免费（用会员账号提交 Apple 服务器校验）。Apple 对开源**没有免费证书豁免**，$99 对所有开发者一致。 |
+| Windows | 可选 | 未签名 exe 可用，但 SmartScreen 会提示「Windows 已保护你的电脑」，浏览器下载时也可能多问一次「是否保留」。代码签名证书（OV/EV）可消除，无免费官方途径，多为自费购买。 |
+| Linux | 否 | AppImage 无签名要求，直接分发。 |
+
+无证书时的临时放行（macOS）：① 右键点击 App → 打开；② 终端执行
+`xattr -cr /Applications/csworkbench.app`（移除 quarantine 属性）。正式分发需配
+`APPLE_*` secrets 走签名 + 公证；macOS 的在线更新同样依赖签名才能生效，无证书时
+macOS 端请走安装包覆盖升级。
+
 ## 已知限制 / 注意事项
 
-- **macOS Gatekeeper**：未签名构建首次运行需右键 → 打开；正式分发需配 `APPLE_*`
-  secrets 走签名 + 公证。
+- **macOS Gatekeeper（无证书时）**：见上「签名与分发」。
 - **Windows Defender**：PyInstaller 单文件二进制偶尔被误报，用代码签名证书缓解。
 - **图标**：想换图标改 `icon-source.png`，重新跑 `npx tauri icon ./icon-source.png`
   生成 `src-tauri/icons/` 全套。

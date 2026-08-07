@@ -75,14 +75,17 @@ jobs:
         uses: tauri-apps/tauri-action@v0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          # macOS 签名/公证(可选):APPLE_CERTIFICATE / APPLE_CERTIFICATE_PASSWORD /
+          # updater 签名密钥:由 `npm run tauri signer generate` 生成,私钥存 GitHub Secrets
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+          # macOS 签名/公证(可选,预留接口):APPLE_CERTIFICATE / APPLE_CERTIFICATE_PASSWORD /
           #   APPLE_SIGNING_IDENTITY / APPLE_ID / APPLE_PASSWORD / APPLE_TEAM_ID
-          # Windows 签名(可选):WINDOWS_CERTIFICATE / WINDOWS_CERTIFICATE_PASSWORD
+          # Windows 代码签名(可选):WINDOWS_CERTIFICATE / WINDOWS_CERTIFICATE_PASSWORD
         with:
           projectPath: ./desktop
           tagName: ${{ github.ref_name }}
           releaseName: "csworkbench ${{ github.ref_name }}"
           releaseDraft: true
           uploadWorkflowArtifacts: true
-          uploadUpdaterJson: false
-          uploadUpdaterSignatures: false
+          uploadUpdaterJson: true
+          uploadUpdaterSignatures: true
