@@ -375,6 +375,9 @@ workbench/
 
 ## 排查问题
 
+> **给维护者**：开发 / 构建 / 发布踩过的坑（Tauri ACL、updater 签名、NSIS 升级、
+> Windows 启动时序、macOS Gatekeeper、版本漂移等）见 [docs/troubleshooting.md](docs/troubleshooting.md)。
+
 **启动时说找不到 Python / 版本太低**
 装 Python 3.10+，Windows 记得勾 “Add Python to PATH”，装完重开终端。
 

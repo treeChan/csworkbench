@@ -42,9 +42,9 @@ async fn check_and_prompt(app: tauri::AppHandle) -> Result<String, String> {
     };
 
     let version = update.version.clone();
-    // release notes（latest.json 的 body 字段，来自 GitHub Release 说明）。
+    // release notes（latest.json 的 body 字段，来自 GitHub Release 说明，可能缺失）。
     // 对话框里展示更新日志，让用户决定是否更新；太长截断，避免窗口撑得过高。
-    let body = update.body.trim();
+    let body = update.body.as_deref().unwrap_or("").trim();
     let notes = if body.is_empty() {
         String::new()
     } else {
