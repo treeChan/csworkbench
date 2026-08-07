@@ -93,6 +93,10 @@ curl 127.0.0.1:<打印的端口>/health
   签名密钥：`npm run tauri signer generate -w ~/.tauri/csworkbench.key` 生成，
   公钥在 `tauri.conf.json` 的 `plugins.updater.pubkey`，私钥存 GitHub Secrets
   （`TAURI_SIGNING_PRIVATE_KEY` / `TAURI_SIGNING_PRIVATE_KEY_PASSWORD`）。
+  调用权限：`check_for_updates` 是**受限命令**——`build.rs` 用
+  `AppManifest::commands` 声明，tauri-build 自动生成 `allow-check-for-updates`
+  权限，`capabilities/remote-dialog.json` 里对 127.0.0.1 远程页面授权。
+  （新增自定义命令若需从设置页调用，需同步改这两处。）
 
 > ⚠️ 维护注意：`src-tauri/nsis/installer.nsi` 是自定义 NSIS 模板（基于 tauri-bundler
 > 默认模板改动）。升级 Tauri 版本时需对照新版模板同步，重点是文件内标注的
