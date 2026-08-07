@@ -50,9 +50,9 @@ async fn check_and_prompt(app: tauri::AppHandle) -> Result<String, String> {
         .kind(tauri_plugin_dialog::MessageDialogKind::Info)
         .buttons(tauri_plugin_dialog::MessageDialogButtons::OkCancel)
         .show(move |result| {
-            if matches!(result, tauri_plugin_dialog::MessageDialogResult::Ok) {
+            if result {
                 tauri::async_runtime::spawn(async move {
-                    match update.download_and_install(|_, _| {}).await {
+                    match update.download_and_install(|_, _| {}, || {}).await {
                         Ok(_) => app.restart(),
                         Err(e) => eprintln!("[csworkbench] 更新下载/安装失败: {e}"),
                     }
