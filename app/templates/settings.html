@@ -107,7 +107,7 @@
     <h3 class="card-title">ℹ️ 关于</h3>
     <table class="about-table">
         <tr><td>应用名称</td><td>{{ app_name }}</td></tr>
-        <tr><td>版本</td><td>v{{ version }} <button type="button" class="btn btn-outline btn-sm update-check-btn">检查更新</button></td></tr>
+        <tr><td>版本</td><td><span class="about-version-cell">v{{ version }} <button type="button" class="btn btn-outline btn-sm update-check-btn">检查更新</button></span></td></tr>
         <tr><td>开源协议</td><td><a href="https://www.mozilla.org/en-US/MPL/2.0/" target="_blank" rel="noopener">Mozilla Public License 2.0（{{ license }}）</a></td></tr>
         <tr><td>数据库路径</td><td><code>{{ db_health.db_path }}</code></td></tr>
         <tr>

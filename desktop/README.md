@@ -71,7 +71,7 @@ curl 127.0.0.1:<打印的端口>/health
 
 ### 方式一：GitHub Actions（推荐，三平台）
 
-1. 在仓库根打 tag 并推送：`git tag v0.4.0 && git push origin v0.4.0`
+1. 在仓库根打 tag 并推送：`git tag v0.4.1 && git push origin v0.4.1`
 2. `.github/workflows/build-desktop.yml` 的矩阵会在 macOS / Windows / Linux
    三个 runner 上各自构建 sidecar + 安装包
 3. 产物出现在 **draft Release** 和 workflow artifacts 里
@@ -82,17 +82,23 @@ curl 127.0.0.1:<打印的端口>/health
 **更新机制（双轨）**：
 - **安装包覆盖升级（主路径，离线可用）**：Windows 安装包走自定义 NSIS 模板
   （`src-tauri/nsis/installer.nsi`），同版本重装 / 版本升级时**直接覆盖安装，不再弹
-  「先卸载再安装」**；appdata 里的配置与数据原样保留（NSIS 卸载器默认也不删
-  `%APPDATA%`，只有卸载页勾选「删除数据」才删）。
-- **在线更新（补充，需联网）**：设置页「关于 → 检查更新」走 Tauri updater；
-  启动后也会静默检查一次，发现新版才弹提示。离线时静默失败，不影响使用。
+  「先卸载再安装」**；**升级时自动继承已安装位置**（`.onInit` 从注册表
+  `${MANUPRODUCTKEY}` 读回上次安装目录，跳过目录选择页，全新安装才让选目录），
+  进度区明确显示「正在更新 csworkbench」并打印更新说明，而不是默默覆盖；
+  appdata 里的配置与数据原样保留（NSIS 卸载器默认也不删 `%APPDATA%`，只有卸载页
+  勾选「删除数据」才删）。
+- **在线更新（补充，需联网）**：设置页「关于 → 检查更新」走 Tauri updater，
+  **弹窗展示更新日志（release notes）** 并让用户选择是否下载安装；启动后也会
+  静默检查一次，发现新版才弹提示。离线时静默失败，不影响使用。
   签名密钥：`npm run tauri signer generate -w ~/.tauri/csworkbench.key` 生成，
   公钥在 `tauri.conf.json` 的 `plugins.updater.pubkey`，私钥存 GitHub Secrets
   （`TAURI_SIGNING_PRIVATE_KEY` / `TAURI_SIGNING_PRIVATE_KEY_PASSWORD`）。
 
 > ⚠️ 维护注意：`src-tauri/nsis/installer.nsi` 是自定义 NSIS 模板（基于 tauri-bundler
 > 默认模板改动）。升级 Tauri 版本时需对照新版模板同步，重点是文件内标注的
-> 「自定义」两处（PageReinstall 强制覆盖 + PageLeaveReinstall 双保险）。
+> 「自定义」块：PageReinstall 强制覆盖 + PageLeaveReinstall 双保险 +
+> 目录页跳过（SkipDirectoryIfUpgrade）+ 安装 Section 升级提示
+> （SectionSetText / DetailPrint）。
 
 ### 方式二：本地构建（以 Linux 为例）
 

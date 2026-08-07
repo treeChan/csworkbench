@@ -173,6 +173,7 @@ input, textarea, select { font-family: inherit; font-size: inherit; }
 }
 .btn-primary:hover { background: var(--c-primary-dark); border-color: var(--c-primary-dark); }
 .btn-outline { background: transparent; border-color: var(--c-border); }
+.btn-sm { padding: 2px 10px; font-size: 12px; line-height: 1.5; }
 .btn-full { width: 100%; }
 .icon-btn {
     border: none; background: transparent; padding: 6px;
@@ -1089,7 +1090,7 @@ button.pipeline-step:focus { outline: 2px solid var(--c-primary-light); outline-
 .about-table td {
     padding: 7px 10px;
     border-bottom: 1px solid var(--c-border-soft);
-    vertical-align: top;
+    vertical-align: middle;
 }
 .about-table td:first-child {
     width: 110px;
@@ -1102,6 +1103,17 @@ button.pipeline-step:focus { outline: 2px solid var(--c-primary-light); outline-
     padding: 2px 6px;
     border-radius: 4px;
     word-break: break-all;
+}
+.about-version-cell {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    line-height: 1;
+}
+.about-version-cell .update-check-btn {
+    margin: 0;
+    white-space: nowrap;
+}
 }
 
 .path-input-row { display: flex; gap: 8px; align-items: center; }

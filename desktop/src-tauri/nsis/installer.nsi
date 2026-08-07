@@ -82,6 +82,7 @@ Var PassiveMode
 Var UpdateMode
 Var NoShortcutMode
 Var WixMode
+Var UpgradeMode
 Var OldMainBinaryName
 
 Name "${PRODUCTNAME}"
@@ -244,6 +245,7 @@ Function PageReinstall
   ;      WiX 迁移(WixMode=1)仍需走卸载,保持默认。
   ${If} $R0 >= 0
   ${AndIf} $WixMode <> 1
+    StrCpy $UpgradeMode 1
     Abort
   ${EndIf}
   ; Reinstalling the same version
@@ -404,7 +406,9 @@ Function PageLeaveReinstall
 FunctionEnd
 
 ; 5. Choose install directory page
-!define MUI_PAGE_CUSTOMFUNCTION_PRE SkipIfPassive
+; ---- 自定义:升级/重装(检测到已装旧版)时跳过目录选择页,直接用已安装位置覆盖;
+;      全新安装仍正常显示目录选择页。
+!define MUI_PAGE_CUSTOMFUNCTION_PRE SkipDirectoryIfUpgrade
 !insertmacro MUI_PAGE_DIRECTORY
 
 ; 6. Start menu shortcut page
@@ -654,7 +658,17 @@ Section WebView2
   ${EndIf}
 SectionEnd
 
-Section Install
+Section "Install" Install
+  ; ---- 自定义:升级/重装时,进度区明确显示「正在更新」而不是「正在安装」,
+  ;      并打印更新说明;全新安装保持默认文案。
+  ${If} $UpgradeMode = 1
+    SectionSetText ${Install} "正在更新 ${PRODUCTNAME}"
+    SetDetailsPrint textonly
+    DetailPrint "正在将 ${PRODUCTNAME} 更新至 ${VERSION}"
+    DetailPrint "（覆盖升级：保留应用配置与数据，安装位置沿用上次的）"
+    SetDetailsPrint both
+  ${EndIf}
+
   SetOutPath $INSTDIR
 
   !ifmacrodef NSIS_HOOK_PREINSTALL
@@ -921,6 +935,15 @@ FunctionEnd
 
 Function Skip
   Abort
+FunctionEnd
+
+; ---- 自定义:目录选择页 pre 函数。升级/重装($UpgradeMode=1)时跳过目录选择,
+;      直接用 .onInit 恢复的已安装位置覆盖;全新安装 / passive 模式保持原行为。
+Function SkipDirectoryIfUpgrade
+  ${If} $UpgradeMode = 1
+    Abort
+  ${EndIf}
+  ${IfThen} $PassiveMode = 1  ${|} Abort ${|}
 FunctionEnd
 
 Function SkipIfPassive

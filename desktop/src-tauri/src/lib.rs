@@ -42,10 +42,27 @@ async fn check_and_prompt(app: tauri::AppHandle) -> Result<String, String> {
     };
 
     let version = update.version.clone();
+    // release notes（latest.json 的 body 字段，来自 GitHub Release 说明）。
+    // 对话框里展示更新日志，让用户决定是否更新；太长截断，避免窗口撑得过高。
+    let body = update.body.trim();
+    let notes = if body.is_empty() {
+        String::new()
+    } else {
+        let truncated: String = body.chars().take(600).collect();
+        if truncated.chars().count() < body.chars().count() {
+            format!("{truncated}\n…（已截断，完整说明见 GitHub Release）")
+        } else {
+            truncated
+        }
+    };
+    let message = if notes.is_empty() {
+        format!("发现新版本 v{version}，是否下载并安装？\n\n安装完成后应用将自动重启。")
+    } else {
+        format!("发现新版本 v{version}：\n\n{notes}\n\n是否下载并安装？\n安装完成后应用将自动重启。")
+    };
+
     app.dialog()
-        .message(format!(
-            "发现新版本 v{version}，是否下载并安装？安装完成后应用将自动重启。"
-        ))
+        .message(message)
         .title("Workbench 更新")
         .kind(tauri_plugin_dialog::MessageDialogKind::Info)
         .buttons(tauri_plugin_dialog::MessageDialogButtons::OkCancel)
