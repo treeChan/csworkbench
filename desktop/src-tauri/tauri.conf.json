@@ -26,9 +26,6 @@
   },
   "bundle": {
     "active": true,
-    // 全平台共用的目标格式（不含 msi：MSI 对 pre-release 版本号有 ≤65535 硬限制，
-    // 预览版时间戳装不下；且 exe(NSIS) 功能完全一样）。各平台自动只打它认识的格式：
-    // Windows→nsis、macOS→app+dmg、Linux→appimage+deb
     "targets": ["appimage", "deb", "nsis", "app", "dmg"],
     "externalBin": ["binaries/workbench-server"],
     "createUpdaterArtifacts": true,
