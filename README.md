@@ -36,7 +36,7 @@ cd workbench
 从项目的 **GitHub Releases** 页下载对应平台的安装包（Windows / macOS / Linux）：
 
 1. 打开 [Releases](https://github.com/treeChan/csworkbench/releases)
-2. 下载最新版对应平台的安装包（.msi / .dmg / .AppImage 等）
+2. 下载最新版对应平台的安装包（Windows .exe / macOS .dmg / Linux .AppImage 等）
 3. 安装后双击图标打开 —— 桌面窗口就是 Workbench，关窗即退出
 
 > 桌面 App 把 Python 运行时一起打包，**不需要安装 Python 3.10+**。
