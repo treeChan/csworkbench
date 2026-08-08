@@ -1,4 +1,4 @@
-# v0.4.5-preview.080901001 Release Notes
+# v0.4.5-preview.809011 Release Notes
 
 > 🔭 这是 **预览版**（preview）：给加入预览计划的用户提前体验新功能，测试稳定后转为正式版。
 > 想先体验可到 设置 → 关于 → 勾选「加入预览计划」；随时可退出。
@@ -51,7 +51,7 @@
 - 改版本号 = 改 `VERSION` 一行（或 `python scripts/sync_version.py 0.4.5`），其余全部跟随，
   不再有 4 个文件手工同步、漏改导致版本不一致的问题。
 - 新增 [docs/versioning.md](versioning.md) 版本号规范：主/次/修订号定义、预览版
-  `x.y.z-preview.MMDDHHNNN` 命名、正式版 `v*` tag 与预览版固定 `preview` tag 的发布流程。
+  `x.y.z-preview.MDHHNN` 命名、正式版 `v*` tag 与预览版固定 `preview` tag 的发布流程。
 
 ## 页面标题统一 🎨
 
@@ -77,4 +77,4 @@
 
 ## 其他
 
-- 预览版本号：**v0.4.5-preview.080901001**（`VERSION` 单一源 + 桌面端对齐）。
+- 预览版本号：**v0.4.5-preview.809011**（`VERSION` 单一源 + 桌面端对齐）。

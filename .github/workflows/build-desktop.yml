@@ -114,8 +114,9 @@ jobs:
           releaseName: "csworkbench ${{ github.ref_name }}"
           releaseBody: ${{ steps.notes.outputs.releaseBody }}
           # preview tag 发布为 pre-release（正式渠道 /releases/latest 自动排除它）
-          releaseType: ${{ startsWith(github.ref_name, 'v') && 'release' || 'prerelease' }}
+          prerelease: ${{ !startsWith(github.ref_name, 'v') }}
           releaseDraft: true
-          uploadWorkflowArtifacts: true
-          uploadUpdaterJson: true
-          uploadUpdaterSignatures: true
+          # v0 tauri-action 参数名：上传 updater 的 latest.json（包含签名）
+          includeUpdaterJson: true
+          # 同时把安装包作为 workflow artifacts 留存（构建产物可见）
+          uploadPlainBinary: true

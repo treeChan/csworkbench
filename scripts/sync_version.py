@@ -17,7 +17,7 @@
 
 桌面端构建会自动触发（package.json 的 pretauri hook；CI 里也在构建前显式执行）。
 
-版本号命名规则（主/次/修订 + 预览版 MMDDHHNNN）与发布流程见 docs/versioning.md。
+版本号命名规则（主/次/修订 + 预览版 MDHHNN）与发布流程见 docs/versioning.md。
 """
 from __future__ import annotations
 
