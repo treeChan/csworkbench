@@ -1110,6 +1110,19 @@ button.pipeline-step:focus { outline: 2px solid var(--c-primary-light); outline-
     gap: 8px;
     line-height: 1;
 }
+.channel-toggle {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    cursor: pointer;
+    font-size: 13px;
+}
+.channel-toggle input[type="checkbox"] {
+    accent-color: var(--c-primary);
+    width: 15px;
+    height: 15px;
+    cursor: pointer;
+}
 .about-version-cell .update-check-btn {
     margin: 0;
     white-space: nowrap;

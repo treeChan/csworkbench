@@ -71,13 +71,30 @@ curl 127.0.0.1:<打印的端口>/health
 
 ### 方式一：GitHub Actions（推荐，三平台）
 
-1. 在仓库根打 tag 并推送：`git tag v0.4.1 && git push origin v0.4.1`
+1. 在仓库根打 tag 并推送：`git tag v0.4.4 && git push origin v0.4.4`
 2. `.github/workflows/build-desktop.yml` 的矩阵会在 macOS / Windows / Linux
-   三个 runner 上各自构建 sidecar + 安装包
+   三个 runner 上各自构建 sidecar + 安装包（触发条件 `tags: ["v*", "preview"]`）
 3. 产物出现在 **draft Release** 和 workflow artifacts 里
 4. **updater 生效前提**：在线更新端点指向 `/releases/latest/download/latest.json`，
    **draft Release 期间取不到**——发布时需把 draft 转正式 Release，应用内的
    「检查更新」才能检测到新版。
+
+**发布渠道（正式 / 预览）**：
+- **正式渠道**：打 `vX.Y.Z` tag（如 `v0.4.4`）→ `releaseType: release`，
+  endpoint `/releases/latest/download/latest.json` 自动指向它。未加入预览计划的用户
+  不会收到预览版推送（GitHub `/releases/latest` 自动排除 pre-release）。
+- **预览渠道**：打 **固定 tag `preview`**（每次预览发布 force push 更新同一 tag）
+  → `releaseType: prerelease`。发布前把版本号临时改为 `0.4.4-preview.N`
+  （`app/config.py` + `Cargo.toml` + `tauri.conf.json` + `package.json`），
+  `latest.json` 里即带完整版本号，updater 弹窗显示如 `v0.4.4-preview.1`。
+- **用户侧**：设置页「加入预览计划」开关持久化在 `localStorage["wb-update-channel"]`
+  （桌面版 webview 常驻，重启仍保持）。开启后 `check_for_updates` 带 `channel="preview"`
+  检查预览 endpoint；关闭则走正式渠道。用户可随时退出。
+- **预览转正式**：预览稳定后，把版本号改回正式（`0.4.4`），打 `v0.4.4` tag 发正式
+  Release。无需改任何代码。也可在 GitHub 网页把某个 Release 的「Pre-release」标记
+  切换。
+- **手动下载**：GitHub Releases 页面列出所有 release（含预览），用户自行点选安装包，
+  与 updater 渠道设置无关。
 
 **更新机制（双轨）**：
 - **安装包覆盖升级（主路径，离线可用）**：Windows 安装包走自定义 NSIS 模板
@@ -151,9 +168,11 @@ FastAPI 应用打包成 sidecar，再套一层 Tauri 壳，窗口最终 navigate
 网页版 `python start.py` 正常不代表桌面版就绪——PyInstaller 是**静态收集**，
 漏掉的东西网页版看不出来，只会在安装包里缺。发版前检查：
 
-- [ ] **版本号对齐**：`src-tauri/tauri.conf.json` 与 `src-tauri/Cargo.toml`
-      的 `version` 改成新版本，再打同名 tag（CI 用 `github.ref_name`
-      命名 Release，建议 tag 与 version 一致）
+- [ ] **版本号对齐**：`app/config.py` + `src-tauri/tauri.conf.json` +
+      `src-tauri/Cargo.toml` + `package.json` 四处 `version` 改成新版本，
+      再打同名 tag（CI 用 `github.ref_name` 命名 Release，建议 tag 与 version 一致）
+- [ ] **改过 `app/static/style.css` / `base.html`** → bump `app/routes/pages.py` 里
+      的 `STYLE_VERSION`（静态资源缓存时间戳），否则桌面端 / 浏览器强缓存会显示旧样式
 - [ ] **新增第三方依赖** → 加进 `sidecar/requirements-desktop.txt`，并确认
       `workbench-server.spec` 的 `collect_all` / `collect_submodules` 列表
       覆盖到了（没覆盖就补）

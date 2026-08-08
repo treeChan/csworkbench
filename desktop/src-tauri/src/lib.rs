@@ -9,6 +9,21 @@ use tauri_plugin_shell::process::{CommandChild, CommandEvent};
 use tauri_plugin_shell::ShellExt;
 use tauri_plugin_updater::UpdaterExt;
 
+/// 更新渠道对应的 updater endpoint。
+/// - stable：GitHub 最新正式 Release（自动排除 pre-release，普通用户不受预览版影响）
+/// - preview：固定 tag 名 `preview` 的 Release（每次预览发布 force push 更新该 tag，
+///   latest.json 里带完整版本号，如 0.4.4-preview.1，updater 弹窗即显示该版本号）
+fn channel_endpoint(channel: &str) -> Option<String> {
+    if channel == "preview" {
+        Some(
+            "https://github.com/treeChan/csworkbench/releases/download/preview/latest.json"
+                .to_string(),
+        )
+    } else {
+        None // 走 tauri.conf.json 里配置的默认 endpoint（正式渠道）
+    }
+}
+
 /// 持有 sidecar 子进程句柄,退出时 kill。
 struct Sidecar(Mutex<Option<CommandChild>>);
 
@@ -31,8 +46,19 @@ fn data_dir(app: &tauri::App) -> PathBuf {
 
 /// 检查更新并弹原生确认框。有新版 → 确认后下载安装并重启;无新版 → 提示已是最新;
 /// 网络失败 → 返回可读错误(离线用户走安装包覆盖升级,在线更新只是补充路径)。
-async fn check_and_prompt(app: tauri::AppHandle) -> Result<String, String> {
-    let updater = app.updater().map_err(|e| format!("更新组件初始化失败：{e}"))?;
+/// channel: "stable"（默认）/ "preview"。preview 用固定 tag 的 endpoint，
+/// stable 走 tauri.conf.json 默认 endpoint。
+async fn check_and_prompt(app: tauri::AppHandle, channel: &str) -> Result<String, String> {
+    let mut updater = app
+        .updater()
+        .map_err(|e| format!("更新组件初始化失败：{e}"))?;
+    if let Some(endpoint) = channel_endpoint(channel) {
+        // 运行时覆盖 endpoint（UpdaterBuilder.endpoints 接受 Vec<Url>）
+        let url = url::Url::parse(&endpoint).map_err(|e| format!("更新地址解析失败：{e}"))?;
+        updater = updater
+            .endpoints(vec![url])
+            .map_err(|e| format!("更新配置失败：{e}"))?;
+    }
     let update = match updater.check().await {
         Ok(u) => u,
         Err(e) => return Err(format!("无法连接更新服务器：{e}")),
@@ -80,9 +106,14 @@ async fn check_and_prompt(app: tauri::AppHandle) -> Result<String, String> {
 }
 
 /// 设置页「检查更新」按钮入口（web 版无 __TAURI__ 时按钮被前端隐藏）。
+/// channel 可选："stable"（默认）/ "preview"。
 #[tauri::command]
-async fn check_for_updates(app: tauri::AppHandle) -> Result<String, String> {
-    check_and_prompt(app).await
+async fn check_for_updates(
+    app: tauri::AppHandle,
+    channel: Option<String>,
+) -> Result<String, String> {
+    let channel = channel.as_deref().unwrap_or("stable");
+    check_and_prompt(app, channel).await
 }
 
 /// 轮询直到 127.0.0.1:port 的 HTTP 服务可响应;成功 true,超时(30s)false。
@@ -141,11 +172,11 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![check_for_updates])
         .manage(Sidecar(Mutex::new(None)))
         .setup(|app| {
-            // 启动后延迟几秒静默检查一次更新;离线失败静默,发现新版才弹提示。
+            // 启动后延迟几秒静默检查一次更新（正式渠道）;离线失败静默,发现新版才弹提示。
             let updater_handle = app.handle().clone();
             tauri::async_runtime::spawn(async move {
                 tokio::time::sleep(Duration::from_secs(5)).await;
-                let _ = check_and_prompt(updater_handle).await;
+                let _ = check_and_prompt(updater_handle, "stable").await;
             });
 
             let handle = app.handle().clone();

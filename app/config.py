@@ -18,10 +18,13 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 BASE_DIR = Path(__file__).resolve().parent.parent
 
 # 当前应用版本（main.py 的 FastAPI version 与桌面端 tauri/Cargo 与此保持一致）
-APP_VERSION = "0.4.3"
+APP_VERSION = "0.4.4"
 
 # 项目开源协议（SPDX 标识；根目录 LICENSE 文件为 MPL 2.0 全文）
 APP_LICENSE = "MPL-2.0"
+
+# 开发者署名（LICENSE 版权声明与 README 末尾口径一致）
+APP_AUTHORS = "treeChan · JesseFather"
 
 # 用户设置持久化文件（设置页写回这里；pydantic-settings 启动时读取）
 #

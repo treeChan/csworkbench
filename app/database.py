@@ -135,7 +135,10 @@ def _migrate_2026_08_05() -> None:
                    然后 DROP 旧 config 列(它是 NOT NULL 又没默认值,
                    ORM 不写它就会触发约束失败,所以必须彻底拿掉)
     - metrics:     新增 note TEXT NOT NULL DEFAULT ''
-    - 新表 artifacts / weekly_reviews 由 create_all() 自己处理
+    - mindmap_nodes: 新增 font_size / font_family 两列（思维导图，v0.4.2+，
+                    见 docs/database-schema.md）
+    - 新表 artifacts / weekly_reviews / mindmaps / mindmap_nodes / mindmap_edges
+      由 create_all() 自己处理
     """
     with engine.begin() as conn:
         # --- experiments.config_md ---

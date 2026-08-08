@@ -6,17 +6,19 @@
     <title>{% block title %}{{ app_name|default('Workbench') }}{% endblock %}</title>
     <script>
     /* 主题初始化：首次绘制前设 data-theme，避免闪一下亮色。
-       wb-theme 三态: system(跟随系统) / light / dark; 空值视为 system。 */
+       优先级：sessionStorage 快速切换（顶栏按钮，本次会话）> localStorage 持久化
+       （设置页）。localStorage 三态: system(跟随系统) / light / dark; 空值视为 system。 */
     (function () {
         try {
-            var t = localStorage.getItem("wb-theme");
+            var t = sessionStorage.getItem("wb-theme-session")   // 顶栏快速切换
+                 || localStorage.getItem("wb-theme");            // 设置页持久化
             var prefersDark = window.matchMedia("(prefers-color-scheme: dark)").matches;
             var dark = t === "dark" || ((t === null || t === "system") && prefersDark);
             if (dark) document.documentElement.setAttribute("data-theme", "dark");
         } catch (e) {}
     })();
     </script>
-    <link rel="stylesheet" href="/static/style.css?v=1786176032">
+    <link rel="stylesheet" href="/static/style.css?v={{ style_version }}">
     <script src="/static/htmx.min.js" defer></script>
     {% block head %}{% endblock %}
 </head>
@@ -158,6 +160,7 @@
 <footer class="statusbar">
     <span class="status-item">🚀 Workbench</span>
     <span class="status-item" id="db-health-status" title="数据库完整性检测中…">● 数据库健康：检测中…</span>
+    <span class="status-item status-copyright">© 2026 <a href="https://github.com/treeChan/csworkbench" target="_blank" rel="noopener">treeChan &amp; JesseFather</a></span>
     <span class="status-right">
         <kbd>Ctrl K</kbd> 搜索 · <kbd>Ctrl N</kbd> 新建
     </span>
@@ -253,44 +256,66 @@ function selectQuickType(btn) {
     }
 
     // ---- 主题（三态：system 跟随系统 / light / dark）----
+    // 两个存储层：
+    //   localStorage "wb-theme"          → 设置页 radio，持久化
+    //   sessionStorage "wb-theme-session" → 顶栏按钮，会话级快速切换（不碰持久化）
+    // 实际显示 = session（若有）覆盖 localStorage。有效模式一律归一为 dark/light。
     var systemMQ = window.matchMedia("(prefers-color-scheme: dark)");
 
-    function updateThemeIcon() {
-        var dark = document.documentElement.getAttribute("data-theme") === "dark";
-        themeBtn.textContent = dark ? "☀️" : "🌙";
-        themeBtn.title = dark ? "切换到亮色" : "切换到暗色";
+    function isDark() {
+        return document.documentElement.getAttribute("data-theme") === "dark";
     }
 
-    // 设置页 radio 依赖这两个全局函数（挂在 window 上）
+    function updateThemeIcon() {
+        // 按钮展示「当前模式」：暗色显示 🌙，亮色显示 ☀️；title 提示点击后的动作
+        themeBtn.textContent = isDark() ? "🌙" : "☀️";
+        themeBtn.title = isDark() ? "切换到亮色" : "切换到暗色";
+    }
+
+    // 设置页 radio 依赖的全局函数：读持久化模式（设置页 radio 勾选始终看持久化值）
     window.wbThemeMode = function () {
         try { return localStorage.getItem("wb-theme") || "system"; } catch (e) { return "system"; }
     };
+    // 设置页 radio 点击 → 持久化写入 + 清掉会话级快速切换（用户明确选了正式配置）
     window.wbSetTheme = function (mode) {
-        try { localStorage.setItem("wb-theme", mode); } catch (e) {}
+        try {
+            localStorage.setItem("wb-theme", mode);
+            sessionStorage.removeItem("wb-theme-session");
+        } catch (e) {}
         applyTheme();
     };
 
+    // 计算当前实际应显示的模式：session 优先，其次持久化
+    function effectiveMode() {
+        var sess = null, ls = null;
+        try { sess = sessionStorage.getItem("wb-theme-session"); } catch (e) {}
+        try { ls = localStorage.getItem("wb-theme"); } catch (e) {}
+        return sess || ls || "system";
+    }
+
     function applyTheme() {
-        var mode = window.wbThemeMode();
+        var mode = effectiveMode();
         var dark = mode === "dark" || (mode === "system" && systemMQ.matches);
         document.documentElement.setAttribute("data-theme", dark ? "dark" : "light");
         updateThemeIcon();
     }
 
-    // 跟随系统模式下，系统主题切换即时生效
+    // 跟随系统模式下，系统主题切换即时生效（只在无会话覆盖时跟随系统）
     if (systemMQ.addEventListener) {
         systemMQ.addEventListener("change", function () {
-            if (window.wbThemeMode() === "system") applyTheme();
+            var sess = null;
+            try { sess = sessionStorage.getItem("wb-theme-session"); } catch (e) {}
+            if (!sess && window.wbThemeMode() === "system") applyTheme();
         });
     }
 
-    // 顶栏按钮：读当前实际明暗，写死成显式 light/dark（把跟随系统钉死）
+    // 顶栏按钮：会话级快速切换。翻转当前实际明暗，只写 sessionStorage，
+    // 不碰 localStorage —— 不影响设置页持久化的配置记录。
     if (themeBtn) {
         themeBtn.addEventListener("click", function () {
-            var root = document.documentElement;
-            var next = root.getAttribute("data-theme") === "dark" ? "light" : "dark";
-            root.setAttribute("data-theme", next);
-            try { localStorage.setItem("wb-theme", next); } catch (e) {}
+            var next = isDark() ? "light" : "dark";
+            try { sessionStorage.setItem("wb-theme-session", next); } catch (e) {}
+            document.documentElement.setAttribute("data-theme", next);
             updateThemeIcon();
         });
         updateThemeIcon();

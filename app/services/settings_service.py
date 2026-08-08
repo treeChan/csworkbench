@@ -12,6 +12,7 @@
 """
 
 import json
+import logging
 import os
 import shutil
 import sqlite3
@@ -40,6 +41,8 @@ from app.database import rebuild_engine
 class SettingsError(Exception):
     """设置操作失败，message 会直接展示给用户。"""
 
+
+logger = logging.getLogger(__name__)
 
 _migrate_lock = threading.Lock()
 
@@ -318,6 +321,44 @@ def migrate_artifact_dir(new_dir_str: str) -> None:
         save_setting("artifact_dir", new_dir_str.strip())
         if old_abs.exists():
             shutil.rmtree(old_abs, ignore_errors=True)
+
+
+# ---------------------------------------------------------------------------
+# 首次启动自动合并存储位置（v0.4.4 起，持续保留若干版本）
+# ---------------------------------------------------------------------------
+# 早期版本允许 db 与 artifacts 分开放置（设置页两个输入框）。v0.4.4 起统一为
+# 「一个数据文件夹」：db 在 <folder>/workbench.db，上传文件在 <folder>/artifacts。
+# 老用户从旧版本升级时，db 与 artifacts 可能在不同目录，这里在启动时自动把
+# artifacts 迁到 db 所在目录下，避免用户手动操作、防止数据混乱丢失。
+#
+# 该逻辑会在后续几个版本中持续保留（等老用户数据全部统一后再移除）：
+# 迁移成功后 db_parent == artifact_parent，下次启动即不再触发，天然幂等。
+
+
+def auto_unify_storage_dirs() -> None:
+    """若 db 与 artifacts 不在同一目录，自动把 artifacts 迁移到 db 所在目录下。
+
+    迁移复用 migrate_artifact_dir 的安全流程（预检→复制→校验→写配置→删旧，
+    失败回滚）。任何失败只记 warning，不阻塞服务启动——宁可保持原配置，
+    也不能因为自动迁移让用户丢数据。
+    """
+    try:
+        db_parent = get_db_path().parent
+        art_parent = get_artifact_dir().parent
+        if db_parent == art_parent:
+            return  # 已统一，无需迁移
+        target = str(db_parent / "artifacts")
+        logger.warning(
+            "检测到数据库与上传文件目录分离（db 父目录=%s，上传父目录=%s），"
+            "自动统一到 %s",
+            db_parent, art_parent, target,
+        )
+        migrate_artifact_dir(target)
+        logger.warning("存储位置已自动统一：上传文件迁移至 %s", target)
+    except SettingsError as exc:
+        logger.warning("自动统一存储位置失败（保持原配置）：%s", exc)
+    except Exception as exc:  # 防御：任何异常都不能拖垮启动
+        logger.warning("自动统一存储位置异常（保持原配置）：%s", exc)
 
 
 # ---------------------------------------------------------------------------

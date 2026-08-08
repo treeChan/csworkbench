@@ -35,7 +35,7 @@ from fastapi.templating import Jinja2Templates
 from sqlalchemy.orm import Session
 
 from app import crud, models, schemas
-from app.config import APP_LICENSE, APP_VERSION, save_setting, settings
+from app.config import APP_AUTHORS, APP_LICENSE, APP_VERSION, save_setting, settings
 from app.database import get_db
 from app.services import settings_service
 
@@ -45,6 +45,10 @@ from app.services import settings_service
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 TEMPLATES_DIR = BASE_DIR / "templates"
+
+# 静态资源缓存版本号：改 style.css / base.html 内嵌样式后 bump 此值，
+# 浏览器强制重新下载（对应 base.html 的 style.css?v={{ style_version }}）
+STYLE_VERSION = "20260808a"
 
 templates = Jinja2Templates(directory=str(TEMPLATES_DIR))
 
@@ -131,6 +135,8 @@ def render(
         "rightbar_decisions": rightbar_decisions,
         "app_name": settings.app_name,
         "pipeline_stages": PIPELINE_STAGES,
+        # 静态资源版本号：CSS/JS 改动时手动 bump，强制浏览器放弃缓存
+        "style_version": STYLE_VERSION,
         **ctx_in,
         **kwargs,
     }
@@ -1144,15 +1150,14 @@ def settings_page(request: Request):
             "active_nav": "settings",
             "saved": request.query_params.get("saved"),
             "error": request.query_params.get("error"),
-            "db_path": settings.db_path,
-            # 输入框按「文件夹」语义展示：db 文件所在目录，保存时自动补 workbench.db
-            "db_dir": str(Path(settings.db_path).parent),
-            "artifact_dir": settings.artifact_dir,
+            # 统一为「数据文件夹」：db 与上传文件都在这一个文件夹下
+            "data_dir": str(Path(settings.db_path).parent),
             "max_upload_size_mb": settings.max_upload_size_mb,
             "app_name": settings.app_name,
             "page_size": settings.page_size,
             "version": APP_VERSION,
             "license": APP_LICENSE,
+            "authors": APP_AUTHORS,
             "db_health": health,
         },
     )
@@ -1160,21 +1165,18 @@ def settings_page(request: Request):
 
 @router.post("/settings/storage")
 def update_storage(
-    db_path: str = Form(...),
-    artifact_dir: str = Form(...),
+    data_dir: str = Form(...),
     max_upload_size_mb: int = Form(100, ge=1, le=2048),
 ):
     """保存存储设置；路径变更时自动迁移（先复制后删除，失败回滚）。
 
-    db_path 按「文件夹」理解：用户填的是存放数据库的目录（不必记得文件名），
-    自动在该目录下使用固定文件名 workbench.db；也兼容直接填完整 .db 路径。
-    先对 db + artifact 两项目标统一预检（可写/已存在/嵌套），
-    全部通过才执行迁移，避免 db 已迁而 artifact 目标不可写的半迁移。
+    用户只填一个「数据文件夹」：数据库固定放该文件夹下 workbench.db，
+    上传文件固定放其下 artifacts 子目录。统一预检 db + artifact 两项目标
+    （可写/已存在/嵌套），全部通过才执行迁移，避免半迁移。
     """
-    db_path = db_path.strip()
-    if not db_path.lower().endswith(".db"):
-        db_path = str(Path(db_path) / "workbench.db")
-    artifact_dir = artifact_dir.strip()
+    data_dir = data_dir.strip()
+    db_path = str(Path(data_dir) / "workbench.db")
+    artifact_dir = str(Path(data_dir) / "artifacts")
     try:
         settings_service.preflight_migrations(db_path, artifact_dir)
         if settings_service.get_db_path() != settings_service.resolve_user_path(db_path):

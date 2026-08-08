@@ -15,6 +15,8 @@
 - [五、版本与 CI](#五版本与-ci)
 - [六、Python 后端](#六python-后端)
 
+> 数据库表结构 / schema 变更 / 前后向兼容：见 [database-schema.md](database-schema.md)。
+
 ---
 
 ## 一、Tauri 桌面端
@@ -60,6 +62,16 @@
 > **新增自定义命令的清单**：以后每加一个需要从设置页（远程页面）调用的命令，
 > 都要同步改 `build.rs` 的 `commands` 列表 + `remote-dialog.json` 的 permissions。
 > 只加 capability 不加 build.rs → not found；只加 build.rs 不加 capability → not allowed by ACL。
+
+### 1.1b 同一命令的类型坑：`update.body` 是 `Option<String>`
+
+**现象**：`let body = update.body.trim();` 编译报
+`no method named trim found for enum Option<String>`。
+
+**根因**：`tauri_plugin_updater::Update` 的 `body`（release notes）字段类型是
+**`Option<String>`**（服务端可能不返回说明），不是 `String`。
+
+**修复**：`update.body.as_deref().unwrap_or("").trim()`。
 
 ### 1.2 updater 签名报 `Invalid symbol 37, offset 348`
 

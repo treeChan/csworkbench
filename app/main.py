@@ -23,6 +23,10 @@ from app.routes import pages as page_routes
 async def lifespan(app: FastAPI):
     """应用启动时初始化数据库与上传目录。"""
     init_db()
+    # 老版本 db 与上传目录可能分开放：v0.4.4 起自动统一到同一数据文件夹
+    # （后续几个版本保留此兼容迁移，见 settings_service.auto_unify_storage_dirs）
+    from app.services import settings_service
+    settings_service.auto_unify_storage_dirs()
     # 顺便把 artifact 目录建好,这样即使没人上传过文件,目录也已经存在
     from app.config import get_artifact_dir
     get_artifact_dir()

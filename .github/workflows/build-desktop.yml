@@ -1,11 +1,15 @@
 name: build-desktop
 
 # 桌面 App (Tauri) 三平台构建。
-# 触发:推送 v* tag,或手动 workflow_dispatch。
+# 触发:
+#   - 推送 v* tag（正式渠道，如 v0.4.4）
+#   - 推送 preview tag（预览渠道：滚动 tag，每次预览发布 force push 更新，
+#     临时把版本号改为 0.4.4-preview.N，latest.json 里带完整版本号）
+#   - 手动 workflow_dispatch
 # 产物:draft Release + workflow artifacts。
 on:
   push:
-    tags: ["v*"]
+    tags: ["v*", "preview"]
   workflow_dispatch:
 
 jobs:
@@ -85,6 +89,8 @@ jobs:
           projectPath: ./desktop
           tagName: ${{ github.ref_name }}
           releaseName: "csworkbench ${{ github.ref_name }}"
+          # preview tag 发布为 pre-release（正式渠道 /releases/latest 自动排除它）
+          releaseType: ${{ startsWith(github.ref_name, 'v') && 'release' || 'prerelease' }}
           releaseDraft: true
           uploadWorkflowArtifacts: true
           uploadUpdaterJson: true

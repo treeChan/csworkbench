@@ -51,26 +51,18 @@
     <h3 class="card-title">💾 数据与存储</h3>
     <form method="post" action="/settings/storage">
         <div class="form-row">
-            <label>数据库文件夹</label>
+            <label>数据文件夹</label>
             <div class="path-input-row">
-                <input type="text" name="db_path" id="db_path" value="{{ db_dir }}" required
+                <input type="text" name="data_dir" id="data_dir" value="{{ data_dir }}" required
                        placeholder="data">
-                <button type="button" class="btn btn-outline browse-btn" data-target="db_path">浏览…</button>
+                <button type="button" class="btn btn-outline browse-btn" data-target="data_dir">浏览…</button>
             </div>
             <p class="settings-hint">
-                选文件夹即可，数据库保存在该文件夹下的 workbench.db 文件（不必记住文件名）。
-                支持相对路径、绝对路径、~ 家目录。修改后自动迁移：先复制并校验完整性、
-                再切换到新库、成功后删除旧库；任一步失败自动回滚原配置。
+                所有数据都放在这一个文件夹下：数据库保存为其中的 workbench.db 文件，
+                上传文件保存在其下的 artifacts 子目录。支持相对路径、绝对路径、~ 家目录。
+                修改后自动迁移：先复制并校验完整性、再切换、成功后删除旧位置；任一步失败自动回滚。
+                老版本若数据库与上传目录分开放，本次启动已自动统一到此文件夹。
             </p>
-        </div>
-        <div class="form-row">
-            <label>上传文件目录</label>
-            <div class="path-input-row">
-                <input type="text" name="artifact_dir" id="artifact_dir" value="{{ artifact_dir }}" required
-                       placeholder="data/artifacts">
-                <button type="button" class="btn btn-outline browse-btn" data-target="artifact_dir">浏览…</button>
-            </div>
-            <p class="settings-hint">图片、模型权重、附件等文件的存放目录。</p>
         </div>
         <div class="form-row">
             <label>单个上传文件上限（MB）</label>
@@ -108,6 +100,19 @@
     <table class="about-table">
         <tr><td>应用名称</td><td>{{ app_name }}</td></tr>
         <tr><td>版本</td><td><span class="about-version-cell">v{{ version }} <button type="button" class="btn btn-outline btn-sm update-check-btn">检查更新</button></span></td></tr>
+        <tr class="update-channel-row">
+            <td>更新渠道</td>
+            <td>
+                <label class="channel-toggle">
+                    <input type="checkbox" id="update-channel-preview"> 加入预览计划（接收预览版更新）
+                </label>
+                <p class="settings-hint">
+                    默认只接收正式版更新；加入预览计划后同时接收预览版与正式版更新
+                    （提前体验新功能）。随时可退出，退出后回到正式版渠道。
+                </p>
+            </td>
+        </tr>
+        <tr><td>开发者</td><td><a href="https://github.com/treeChan/csworkbench" target="_blank" rel="noopener">{{ authors }}</a></td></tr>
         <tr><td>开源协议</td><td><a href="https://www.mozilla.org/en-US/MPL/2.0/" target="_blank" rel="noopener">Mozilla Public License 2.0（{{ license }}）</a></td></tr>
         <tr><td>数据库路径</td><td><code>{{ db_health.db_path }}</code></td></tr>
         <tr>
@@ -154,7 +159,9 @@
     if (s) { var sm = (s.textContent || "").trim(); if (sm) window.showToast(sm, "success"); }
 })();
 
-/* 桌面 App（Tauri）：「检查更新」按钮；web 版无 __TAURI__ 则隐藏 */
+/* 桌面 App（Tauri）：「检查更新」按钮 + 「加入预览计划」开关；web 版无 __TAURI__ 则隐藏
+   预览计划持久化在 localStorage["wb-update-channel"]（"preview"/"stable"），
+   桌面版 webview 的 localStorage 常驻，重启后仍保持；退出即恢复正式渠道。 */
 (function () {
     "use strict";
     var btn = document.querySelector(".update-check-btn");
@@ -162,12 +169,32 @@
     var api = window.__TAURI__;
     var invoke = api && api.core && api.core.invoke ? api.core.invoke
                : (api && api.invoke ? api.invoke : null);
-    if (!invoke) { btn.style.display = "none"; return; }
+    if (!invoke) {
+        btn.style.display = "none";
+        var row = document.querySelector(".update-channel-row");
+        if (row) row.style.display = "none";
+        return;
+    }
+
+    var previewChk = document.getElementById("update-channel-preview");
+    var CHANNEL_KEY = "wb-update-channel";
+
+    // 载入时恢复预览计划状态
+    if (previewChk) {
+        try { previewChk.checked = localStorage.getItem(CHANNEL_KEY) === "preview"; } catch (e) {}
+        previewChk.addEventListener("change", function () {
+            try {
+                localStorage.setItem(CHANNEL_KEY, previewChk.checked ? "preview" : "stable");
+            } catch (e) {}
+        });
+    }
+
     btn.addEventListener("click", function () {
         var b = this;
         b.disabled = true;
         b.textContent = "检查中…";
-        invoke("check_for_updates")
+        var channel = previewChk && previewChk.checked ? "preview" : "stable";
+        invoke("check_for_updates", { channel: channel })
             .then(function (msg) { window.showToast(msg, "info"); })
             .catch(function (e) { window.showToast("检查更新失败：" + e, "error"); })
             .finally(function () {
