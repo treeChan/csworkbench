@@ -48,7 +48,8 @@ cd workbench
 > 可在设置页 → 数据与存储 更改数据库文件夹，改动会持久保存（重启 App 不丢）；
 > 或用「下载完整备份 / 恢复备份」在电脑间迁移。想直接拷文件迁移也行：把旧的
 > `.db` 文件拷到上述目录即可。
-> ⚠️ 未签名版本首次运行时，macOS 需要右键 → 打开（Gatekeeper）。
+> ⚠️ macOS 未签名版本首次运行时：右键 → 打开；若提示「已损坏，应将其移入废纸篓」，
+> 在终端执行 `xattr -cr "/Applications/csworkbench.app"` 后重开（移除 quarantine 属性）。
 
 ### 第二步（方式二）：浏览器版
 
@@ -153,7 +154,7 @@ run.bat --data D:/科研数据                   # Windows
 |---|---|
 | 常规 | 主题（跟随系统 / 亮色 / 暗色）、每页显示条数 |
 | 数据与存储 | 数据库文件夹、上传文件目录、上传大小上限；「下载完整备份」与「恢复备份」（一键导出 / 跨电脑一键导入） |
-| 关于 | 应用名称、版本号、数据库路径、数据库大小、健康状态 |
+| 关于 | 应用名称、版本号（附「检查更新」按钮，桌面版）、开源协议、数据库路径、数据库大小、健康状态 |
 
 **数据库路径按「文件夹」理解**：选存放数据库的文件夹即可（数据存在该文件夹下的
 `workbench.db`，不必记住文件名），支持相对路径、绝对路径、`~` 家目录。
@@ -285,6 +286,26 @@ API 端点：`GET /api/experiments/{id}/export`
 
 没有前端构建步骤，改完模板或 CSS 刷新页面就生效。
 
+### 浏览器版与桌面版：同一套代码
+
+浏览器版（`run.sh` / `run.bat`）和桌面版（`desktop/`，Tauri 壳）**共用同一份后端
+代码与前端模板**（`app/` 下的 FastAPI 路由、Jinja2 模板、CSS/JS）——桌面版只是用
+PyInstaller 把同一个 FastAPI 应用打包成 sidecar，再套一层 Tauri 窗口，窗口最终加载
+`http://127.0.0.1:PORT/`。功能开发只改一处，两版同时生效。
+
+差异仅在「宿主能力」：
+
+| | 浏览器版 | 桌面版 |
+|---|---|---|
+| 数据位置 | 项目内 `data/`（网页版 `.env` 配置） | 系统用户数据目录（appdata） |
+| 原生目录选择「浏览…」 | 无（手动输入路径） | 有（Tauri 原生对话框） |
+| 在线更新「检查更新」 | 无（按钮隐藏） | 有（Tauri updater） |
+| 启动 | 浏览器打开 127.0.0.1:8000 | Tauri 窗口内嵌 |
+| Python | 需本机安装 3.10+ | 已打包，无需安装 |
+
+前端模板通过 `window.__TAURI__` 是否存在来按环境启用 / 隐藏桌面独有能力，
+所以是「同一套模板、两版行为不同」。
+
 > 前端资源（含 HTMX）均已本地化到 `app/static/`，页面不依赖任何外部 CDN，
 > 内网 / 离线环境下也能完整加载。
 
@@ -351,9 +372,11 @@ workbench/
 - `app/static/charts.js` 目前没有任何模板引用它（指标走的是表格，不再画曲线）
 - `base.html` 加载了本地化的 HTMX（`app/static/htmx.min.js`，不依赖外部 CDN），但代码里还没有用到任何 `hx-*` 属性
 - `WORKBENCH_DEBUG` 配置项已声明但尚未接线
-- 桌面 App 三平台安装包（v0.3.1）已由 GitHub Actions 构建并上传到 Release（draft 待发布）
 
 ## 排查问题
+
+> **给维护者**：开发 / 构建 / 发布踩过的坑（Tauri ACL、updater 签名、NSIS 升级、
+> Windows 启动时序、macOS Gatekeeper、版本漂移等）见 [docs/troubleshooting.md](docs/troubleshooting.md)。
 
 **启动时说找不到 Python / 版本太低**
 装 Python 3.10+，Windows 记得勾 “Add Python to PATH”，装完重开终端。
@@ -376,3 +399,12 @@ Windows 上是 `.venv\Scripts\pip`。装完再跑启动脚本。
 ```bash
 sqlite3 data/workbench.db ".tables"
 ```
+
+---
+
+## License
+
+本项目采用 [Mozilla Public License 2.0（MPL-2.0）](LICENSE)：修改过的源文件必须以 MPL-2.0
+开源，未改动的部分可闭源；允许商用。全文见根目录 [LICENSE](LICENSE)。
+
+© 2026 treeChan & JesseFather

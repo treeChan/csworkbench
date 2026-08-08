@@ -1,7 +1,8 @@
 {
   "name": "csworkbench-desktop",
   "private": true,
-  "version": "0.2.0",
+  "version": "0.4.1",
+  "license": "MPL-2.0",
   "scripts": {
     "tauri": "tauri"
   },

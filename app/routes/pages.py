@@ -35,7 +35,7 @@ from fastapi.templating import Jinja2Templates
 from sqlalchemy.orm import Session
 
 from app import crud, models, schemas
-from app.config import APP_VERSION, save_setting, settings
+from app.config import APP_LICENSE, APP_VERSION, save_setting, settings
 from app.database import get_db
 from app.services import settings_service
 
@@ -1152,6 +1152,7 @@ def settings_page(request: Request):
             "app_name": settings.app_name,
             "page_size": settings.page_size,
             "version": APP_VERSION,
+            "license": APP_LICENSE,
             "db_health": health,
         },
     )

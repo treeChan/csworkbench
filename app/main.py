@@ -33,6 +33,10 @@ app = FastAPI(
     title=settings.app_name,
     description="个人实验 / 项目跟踪工作台。",
     version=APP_VERSION,
+    license_info={
+        "name": "MPL 2.0",
+        "url": "https://www.mozilla.org/en-US/MPL/2.0/",
+    },
     lifespan=lifespan,
 )
 

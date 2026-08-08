@@ -7,17 +7,11 @@
 </div>
 
 {% if error %}
-<div class="alert alert-error">
-    <strong>设置失败：</strong> {{ error }}
-</div>
+<div class="alert alert-error" id="settings-error-flash" style="display:none">{{ error }}</div>
 {% endif %}
 {% if saved %}
-<div class="alert alert-success">
-    <strong>已保存。</strong>
-    {% if saved == 'storage' %}存储设置已更新（路径迁移已完成）。{% elif saved == 'general' %}常规设置已更新。{% elif saved == 'restore' %}备份已恢复，数据已全部还原。{% endif %}
-</div>
+<div class="alert alert-success" id="settings-saved-flash" style="display:none">已保存。{% if saved == 'storage' %}存储设置已更新（路径迁移已完成）。{% elif saved == 'general' %}常规设置已更新。{% elif saved == 'restore' %}备份已恢复，数据已全部还原。{% endif %}</div>
 {% endif %}
-<div id="page-notice" style="display:none"></div>
 
 <!-- 常规（最前）：主题 + 每页条数 -->
 <div class="card settings-card">
@@ -113,7 +107,8 @@
     <h3 class="card-title">ℹ️ 关于</h3>
     <table class="about-table">
         <tr><td>应用名称</td><td>{{ app_name }}</td></tr>
-        <tr><td>版本</td><td>v{{ version }}</td></tr>
+        <tr><td>版本</td><td><span class="about-version-cell">v{{ version }} <button type="button" class="btn btn-outline btn-sm update-check-btn">检查更新</button></span></td></tr>
+        <tr><td>开源协议</td><td><a href="https://www.mozilla.org/en-US/MPL/2.0/" target="_blank" rel="noopener">Mozilla Public License 2.0（{{ license }}）</a></td></tr>
         <tr><td>数据库路径</td><td><code>{{ db_health.db_path }}</code></td></tr>
         <tr>
             <td>数据库大小</td>
@@ -150,20 +145,36 @@
     }
 })();
 
-/* 页面内提示条（下载反馈用，替代 alert 打断） */
+/* 服务端渲染的 saved/error 消息 → 悬浮 toast（无需滚动到页面顶部） */
 (function () {
     "use strict";
-    var noticeEl = document.getElementById("page-notice");
-    window.showNotice = function (html, isError) {
-        if (!noticeEl) { alert(html); return; }
-        noticeEl.innerHTML = html;
-        noticeEl.className = "alert " + (isError ? "alert-error" : "alert-success");
-        noticeEl.style.display = "block";
-        clearTimeout(window.showNotice._t);
-        window.showNotice._t = setTimeout(function () {
-            noticeEl.style.display = "none";
-        }, isError ? 8000 : 10000);
-    };
+    var e = document.getElementById("settings-error-flash");
+    if (e) { var em = (e.textContent || "").trim(); if (em) window.showToast(em, "error"); }
+    var s = document.getElementById("settings-saved-flash");
+    if (s) { var sm = (s.textContent || "").trim(); if (sm) window.showToast(sm, "success"); }
+})();
+
+/* 桌面 App（Tauri）：「检查更新」按钮；web 版无 __TAURI__ 则隐藏 */
+(function () {
+    "use strict";
+    var btn = document.querySelector(".update-check-btn");
+    if (!btn) return;
+    var api = window.__TAURI__;
+    var invoke = api && api.core && api.core.invoke ? api.core.invoke
+               : (api && api.invoke ? api.invoke : null);
+    if (!invoke) { btn.style.display = "none"; return; }
+    btn.addEventListener("click", function () {
+        var b = this;
+        b.disabled = true;
+        b.textContent = "检查中…";
+        invoke("check_for_updates")
+            .then(function (msg) { window.showToast(msg, "info"); })
+            .catch(function (e) { window.showToast("检查更新失败：" + e, "error"); })
+            .finally(function () {
+                b.disabled = false;
+                b.textContent = "检查更新";
+            });
+    });
 })();
 
 /* 下载完整备份：前端触发，让用户明确知道保存到哪了 */

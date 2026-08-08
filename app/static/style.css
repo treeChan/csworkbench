@@ -173,6 +173,7 @@ input, textarea, select { font-family: inherit; font-size: inherit; }
 }
 .btn-primary:hover { background: var(--c-primary-dark); border-color: var(--c-primary-dark); }
 .btn-outline { background: transparent; border-color: var(--c-border); }
+.btn-sm { padding: 2px 10px; font-size: 12px; line-height: 1.5; }
 .btn-full { width: 100%; }
 .icon-btn {
     border: none; background: transparent; padding: 6px;
@@ -520,6 +521,39 @@ button.pipeline-step:focus { outline: 2px solid var(--c-primary-light); outline-
     color: var(--c-success);
     border-left: 3px solid var(--c-success);
 }
+
+/* ---------- 悬浮提示（toast）：顶部居中、自动消失、可点击关闭 ---------- */
+.toast-container {
+    position: fixed;
+    top: 24px;
+    left: 50%;
+    transform: translateX(-50%);
+    z-index: 9999;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 8px;
+    width: min(92vw, 560px);
+    pointer-events: none; /* 容器不挡页面点击 */
+}
+.toast {
+    pointer-events: auto;
+    max-width: 100%;
+    padding: 11px 18px;
+    border-radius: var(--radius-md);
+    font-size: 13px;
+    line-height: 1.5;
+    box-shadow: var(--shadow-lg);
+    opacity: 0;
+    transform: translateY(-8px);
+    transition: opacity 0.2s ease, transform 0.2s ease;
+    cursor: pointer;
+}
+.toast.toast-show { opacity: 1; transform: translateY(0); }
+.toast.toast-hide { opacity: 0; transform: translateY(-8px); }
+.toast-success { background: var(--c-success-bg); color: var(--c-success); border-left: 3px solid var(--c-success); }
+.toast-error { background: var(--c-danger-bg); color: var(--c-danger); border-left: 3px solid var(--c-danger); }
+.toast-info { background: var(--c-surface); color: var(--c-text); border-left: 3px solid var(--c-info); }
 
 /* 页内大区块分隔（实验设计 / 实验结果） */
 .section-divider {
@@ -1056,7 +1090,7 @@ button.pipeline-step:focus { outline: 2px solid var(--c-primary-light); outline-
 .about-table td {
     padding: 7px 10px;
     border-bottom: 1px solid var(--c-border-soft);
-    vertical-align: top;
+    vertical-align: middle;
 }
 .about-table td:first-child {
     width: 110px;
@@ -1069,6 +1103,17 @@ button.pipeline-step:focus { outline: 2px solid var(--c-primary-light); outline-
     padding: 2px 6px;
     border-radius: 4px;
     word-break: break-all;
+}
+.about-version-cell {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    line-height: 1;
+}
+.about-version-cell .update-check-btn {
+    margin: 0;
+    white-space: nowrap;
+}
 }
 
 .path-input-row { display: flex; gap: 8px; align-items: center; }

@@ -97,9 +97,7 @@
     <!-- 中间主区 -->
     <main class="main-content">
         {% if error %}
-        <div class="alert alert-error">
-            <strong>错误：</strong> {{ error }}
-        </div>
+        <div class="alert alert-error" id="global-error-flash" style="display:none">{{ error }}</div>
         {% endif %}
 
         {% block content %}{% endblock %}
@@ -166,6 +164,57 @@
 </footer>
 
 {% block scripts %}
+<script>
+/* ===== 全局悬浮提示（toast）：顶部居中、自动消失、可点击关闭 =====
+   window.showToast(message, type[, asHtml])
+   type: success | error | info（默认 success）；asHtml=true 时按 HTML 注入（下载备份等带 <b> 的提示）。
+   window.showNotice 兼容旧调用（settings 页下载反馈），统一走 toast。 */
+(function () {
+    "use strict";
+    var container = null;
+    function ensureContainer() {
+        if (container) return container;
+        container = document.createElement("div");
+        container.className = "toast-container";
+        container.setAttribute("aria-live", "polite");
+        document.body.appendChild(container);
+        return container;
+    }
+    function dismiss(node) {
+        if (!node.parentNode) return;
+        node.classList.remove("toast-show");
+        node.classList.add("toast-hide");
+        setTimeout(function () {
+            if (node.parentNode) node.parentNode.removeChild(node);
+        }, 200);
+    }
+    window.showToast = function (message, type, asHtml) {
+        type = type || "success";
+        var el = document.createElement("div");
+        el.className = "toast toast-" + type;
+        if (asHtml) { el.innerHTML = message; } else { el.textContent = message; }
+        ensureContainer().appendChild(el);
+        requestAnimationFrame(function () { el.classList.add("toast-show"); });
+        var delay = type === "error" ? 6000 : 4000;
+        var timer = setTimeout(function () { dismiss(el); }, delay);
+        el.addEventListener("click", function () { clearTimeout(timer); dismiss(el); });
+    };
+    window.showNotice = function (message, isError) {
+        window.showToast(message, isError ? "error" : "success", true);
+    };
+})();
+
+/* 服务端渲染的全局 flash 错误 → 悬浮 toast（不再需要滚动到页面顶部看） */
+(function () {
+    "use strict";
+    var el = document.getElementById("global-error-flash");
+    if (el) {
+        var msg = (el.textContent || "").trim();
+        if (msg) window.showToast(msg, "error");
+    }
+})();
+</script>
+
 <script>
 function selectQuickType(btn) {
     document.querySelectorAll('.quick-type').forEach(b => b.classList.remove('active'));
