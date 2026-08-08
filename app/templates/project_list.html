@@ -3,9 +3,11 @@
 
 {% block content %}
 <div class="today-header">
-    <h1>研究项目</h1>
-    <span class="today-date">共 {{ projects|length }} 个项目</span>
-    <a href="/projects/new" class="btn btn-primary" style="margin-left: auto;">+ 新建项目</a>
+    <div class="warroom-title">
+        <h1>📁 研究项目</h1>
+        <span class="today-date">共 {{ projects|length }} 个项目</span>
+    </div>
+    <a href="/projects/new" class="btn btn-primary">+ 新建项目</a>
 </div>
 
 {% if not projects %}

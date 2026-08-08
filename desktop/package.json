@@ -1,10 +1,11 @@
 {
   "name": "csworkbench-desktop",
   "private": true,
-  "version": "0.4.4",
+  "version": "0.4.5-preview.080901001",
   "license": "MPL-2.0",
   "scripts": {
-    "tauri": "tauri"
+    "tauri": "tauri",
+    "pretauri": "python ../scripts/sync_version.py"
   },
   "devDependencies": {
     "@tauri-apps/cli": "^2"

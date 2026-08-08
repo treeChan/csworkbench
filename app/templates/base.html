@@ -166,6 +166,29 @@
     </span>
 </footer>
 
+<!-- =================== 全局更新弹窗（桌面版）===================
+     检测到新版本时在任意页面屏幕正中弹出，展示版本号 + 更新日志，
+     点「立即更新」下载安装重启；点「稍后」关闭，本次不再打扰。
+     web 版无 __TAURI__ 时整个遮罩不渲染。 -->
+<div class="update-modal-backdrop" id="update-modal" hidden>
+    <div class="update-modal" role="dialog" aria-modal="true" aria-labelledby="update-modal-title">
+        <div class="update-modal-icon">🚀</div>
+        <h3 class="update-modal-title" id="update-modal-title">发现新版本</h3>
+        <div class="update-modal-version" id="update-modal-version"></div>
+        <div class="update-modal-notes" id="update-modal-notes"></div>
+        <div class="update-progress" id="update-modal-progress" hidden>
+            <div class="update-progress-bar">
+                <div class="update-progress-fill" id="update-modal-fill"></div>
+            </div>
+            <div class="update-progress-text" id="update-modal-text">准备下载…</div>
+        </div>
+        <div class="update-modal-actions">
+            <button type="button" class="btn btn-outline" id="update-modal-later">稍后</button>
+            <button type="button" class="btn btn-primary" id="update-modal-now">立即更新</button>
+        </div>
+    </div>
+</div>
+
 {% block scripts %}
 <script>
 /* ===== 全局悬浮提示（toast）：顶部居中、自动消失、可点击关闭 =====
@@ -366,6 +389,100 @@ function selectQuickType(btn) {
     }
     poll();
     setInterval(poll, 60000);
+})();
+</script>
+
+<script>
+/* ===== 全局更新弹窗（桌面版 Tauri）=====
+   启动后调用 start_auto_check 静默检查；有新版时 Rust 广播 update://available，
+   这里在任意页面屏幕正中弹窗展示版本号 + 更新日志，点「立即更新」→ install_update
+   下载安装重启，进度实时展示。网络失败 Rust 侧每分钟静默重试，这里不打扰用户。 */
+(function () {
+    "use strict";
+    var api = window.__TAURI__;
+    var invoke = api && api.core && api.core.invoke ? api.core.invoke
+               : (api && api.invoke ? api.invoke : null);
+    var modal = document.getElementById("update-modal");
+    if (!invoke || !modal) return;   // web 版 / 无弹窗元素 → 全部跳过
+
+    var shown = false;               // 本次会话已弹过 → 不再重复打扰
+    var versionEl = document.getElementById("update-modal-version");
+    var notesEl = document.getElementById("update-modal-notes");
+    var progWrap = document.getElementById("update-modal-progress");
+    var progFill = document.getElementById("update-modal-fill");
+    var progText = document.getElementById("update-modal-text");
+    var laterBtn = document.getElementById("update-modal-later");
+    var nowBtn = document.getElementById("update-modal-now");
+
+    // 更新渠道：与设置页「加入预览计划」开关共用 localStorage 记录。
+    var channel = "stable";
+    try { channel = localStorage.getItem("wb-update-channel") === "preview" ? "preview" : "stable"; } catch (e) {}
+
+    function openModal(info) {
+        shown = true;
+        if (versionEl) versionEl.textContent = "v" + info.version;
+        if (notesEl) {
+            notesEl.textContent = info.notes || "更新说明见 GitHub Release 页面。";
+        }
+        modal.hidden = false;
+    }
+    function closeModal() { modal.hidden = true; }
+    function setProgress(pct, text) {
+        if (progFill) progFill.style.width = pct + "%";
+        if (progText) progText.textContent = text;
+    }
+
+    // 监听 Rust 广播：发现新版本 → 弹窗
+    function listen(name, cb) {
+        try {
+            var evtApi = window.__TAURI__ && window.__TAURI__.event;
+            if (evtApi && evtApi.listen) { evtApi.listen(name, cb); return; }
+        } catch (e) {}
+    }
+    listen("update://available", function (e) {
+        if (shown) return;                    // 已弹过，避免重复打扰
+        var p = e && e.payload;
+        if (p && p.version) openModal(p);
+    });
+    // 下载进度 → 弹窗进度条
+    listen("update://download-progress", function (e) {
+        var p = e && e.payload; if (!p) return;
+        progWrap.hidden = false;
+        var total = p.total || 0;
+        var pct = total > 0 ? Math.round(p.percent || 0) : 0;
+        if (total > 0) {
+            var mb = (total / 1048576).toFixed(1);
+            var cur = (p.current / 1048576).toFixed(1);
+            setProgress(pct, "正在下载更新… " + pct + "%（" + cur + " / " + mb + " MB）");
+        } else {
+            setProgress(0, "正在下载更新…（等待服务器响应）");
+        }
+    });
+    listen("update://download-done", function () {
+        progWrap.hidden = false;
+        setProgress(100, "下载完成，正在安装并重启…");
+    });
+
+    // 按钮
+    if (laterBtn) laterBtn.addEventListener("click", closeModal);
+    if (nowBtn) nowBtn.addEventListener("click", function () {
+        nowBtn.disabled = true;
+        nowBtn.textContent = "正在更新…";
+        laterBtn.disabled = true;
+        progWrap.hidden = false;
+        setProgress(0, "准备下载…");
+        invoke("install_update")
+            .then(function () { /* 安装成功 → Rust 已触发重启 */ })
+            .catch(function (err) {
+                setProgress(0, "更新失败：" + err);
+                nowBtn.disabled = false;
+                nowBtn.textContent = "重试";
+                laterBtn.disabled = false;
+            });
+    });
+
+    // 启动静默自动检查（每页面加载只触发一次 Rust 后台循环，Rust 侧网络失败每分钟重试）
+    invoke("start_auto_check", { channel: channel }).catch(function () {});
 })();
 </script>
 {% endblock %}

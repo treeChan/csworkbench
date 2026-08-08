@@ -134,6 +134,13 @@
             </td>
         </tr>
     </table>
+    <!-- 更新下载进度条（桌面版检查更新时显示，平时隐藏） -->
+    <div class="update-progress" id="update-progress" hidden>
+        <div class="update-progress-bar">
+            <div class="update-progress-fill" id="update-progress-fill"></div>
+        </div>
+        <div class="update-progress-text" id="update-progress-text">准备下载…</div>
+    </div>
 </div>
 {% endblock %}
 
@@ -179,6 +186,43 @@
     var previewChk = document.getElementById("update-channel-preview");
     var CHANNEL_KEY = "wb-update-channel";
 
+    // 下载进度条：监听 Rust 侧广播的进度事件（下载中 → 实时百分比，完成 → 提示重启）
+    var progWrap = document.getElementById("update-progress");
+    var progFill = document.getElementById("update-progress-fill");
+    var progText = document.getElementById("update-progress-text");
+    function showProgress() { if (progWrap) progWrap.hidden = false; }
+    function setProgress(pct, text) {
+        if (progFill) progFill.style.width = pct + "%";
+        if (progText) progText.textContent = text;
+    }
+    function listen(name, cb) {
+        try {
+            var evtApi = window.__TAURI__ && window.__TAURI__.event;
+            if (evtApi && evtApi.listen) { evtApi.listen(name, cb); return; }
+        } catch (e) {}
+        // 事件 API 不可用时退化：完成事件无感知，但进度条仍可用
+    }
+    if (progWrap) {
+        listen("update://download-progress", function (e) {
+            var p = e && e.payload;
+            if (!p) return;
+            var total = p.total || 0;
+            var pct = total > 0 ? Math.round(p.percent || 0) : 0;
+            showProgress();
+            if (total > 0) {
+                var mb = (total / 1048576).toFixed(1);
+                var cur = (p.current / 1048576).toFixed(1);
+                setProgress(pct, "正在下载更新… " + pct + "%（" + cur + " / " + mb + " MB）");
+            } else {
+                setProgress(0, "正在下载更新…（等待服务器响应）");
+            }
+        });
+        listen("update://download-done", function () {
+            showProgress();
+            setProgress(100, "下载完成，正在安装并重启…");
+        });
+    }
+
     // 载入时恢复预览计划状态
     if (previewChk) {
         try { previewChk.checked = localStorage.getItem(CHANNEL_KEY) === "preview"; } catch (e) {}
@@ -195,7 +239,12 @@
         b.textContent = "检查中…";
         var channel = previewChk && previewChk.checked ? "preview" : "stable";
         invoke("check_for_updates", { channel: channel })
-            .then(function (msg) { window.showToast(msg, "info"); })
+            .then(function (msg) {
+                // 「发现新版本」时全局弹窗（update://available 事件）已居中弹出，
+                // 这里不再重复 toast；只有「已是最新」才提示。
+                if (msg && msg.indexOf("发现新版本") === 0) return;
+                window.showToast(msg || "检查完成", "info");
+            })
             .catch(function (e) { window.showToast("检查更新失败：" + e, "error"); })
             .finally(function () {
                 b.disabled = false;

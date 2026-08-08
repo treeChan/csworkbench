@@ -2,12 +2,33 @@ use std::path::PathBuf;
 use std::sync::Mutex;
 use std::time::{Duration, Instant};
 
-use serde::Deserialize;
-use tauri::{Manager, RunEvent};
-use tauri_plugin_dialog::DialogExt;
+use serde::{Deserialize, Serialize};
+use tauri::{Emitter, Manager, RunEvent};
 use tauri_plugin_shell::process::{CommandChild, CommandEvent};
 use tauri_plugin_shell::ShellExt;
-use tauri_plugin_updater::UpdaterExt;
+use tauri_plugin_updater::{Update, UpdaterExt};
+
+/// 更新下载进度事件 payload（发给前端展示进度条）。
+/// current / total 为已下载字节与总字节（total 可能未知为 0）。
+#[derive(Clone, Serialize)]
+struct UpdateProgress {
+    current: u64,
+    total: u64,
+    percent: f32,
+}
+
+/// 检查到的新版本（emit 给前端统一弹窗展示）。
+#[derive(Clone, Serialize)]
+struct UpdateAvailable {
+    version: String,
+    notes: String,
+}
+
+/// 持有检查到、等待用户确认安装的 Update。前端点「立即更新」后由 install_update 取出。
+struct PendingUpdate(Mutex<Option<Update>>);
+
+/// 自动检查循环是否已启动（防止前端多页面切换时 spawn 多个重复循环）。
+struct AutoCheckStarted(Mutex<bool>);
 
 /// 更新渠道对应的 updater endpoint。
 /// - stable：GitHub 最新正式 Release（自动排除 pre-release，普通用户不受预览版影响）
@@ -44,11 +65,13 @@ fn data_dir(app: &tauri::App) -> PathBuf {
         .unwrap_or_else(|_| std::env::temp_dir().join("csworkbench"))
 }
 
-/// 检查更新并弹原生确认框。有新版 → 确认后下载安装并重启;无新版 → 提示已是最新;
-/// 网络失败 → 返回可读错误(离线用户走安装包覆盖升级,在线更新只是补充路径)。
+/// 检查更新。有新版 → 存入 PendingUpdate 状态 + emit update://available 事件（前端统一弹窗），
+/// 返回 "发现新版本 vX"；无新版 → 返回 "当前已是最新版本"；网络失败 → Err(可读错误)。
+///
+/// 本函数只「检查并广播」，不再弹原生对话框——确认与安装统一走前端居中弹窗 + install_update。
 /// channel: "stable"（默认）/ "preview"。preview 用固定 tag 的 endpoint，
 /// stable 走 tauri.conf.json 默认 endpoint。
-async fn check_and_prompt(app: tauri::AppHandle, channel: &str) -> Result<String, String> {
+async fn check_and_notify(app: &tauri::AppHandle, channel: &str) -> Result<String, String> {
     // app.updater_builder() 返回 UpdaterBuilder（有 .endpoints() / .build()）；
     // app.updater() 是它的 build() 结果（无 .endpoints()）。
     let mut updater = app.updater_builder();
@@ -70,40 +93,106 @@ async fn check_and_prompt(app: tauri::AppHandle, channel: &str) -> Result<String
 
     let version = update.version.clone();
     // release notes（latest.json 的 body 字段，来自 GitHub Release 说明，可能缺失）。
-    // 对话框里展示更新日志，让用户决定是否更新；太长截断，避免窗口撑得过高。
-    let body = update.body.as_deref().unwrap_or("").trim();
-    let notes = if body.is_empty() {
+    // 前端弹窗里展示更新日志；太长截断，避免弹窗撑得过高。
+    let raw_body = update.body.as_deref().unwrap_or("").trim();
+    let notes = if raw_body.is_empty() {
         String::new()
     } else {
-        let truncated: String = body.chars().take(600).collect();
-        if truncated.chars().count() < body.chars().count() {
+        let truncated: String = raw_body.chars().take(600).collect();
+        if truncated.chars().count() < raw_body.chars().count() {
             format!("{truncated}\n…（已截断，完整说明见 GitHub Release）")
         } else {
-            truncated
+            truncated.to_string()
         }
     };
-    let message = if notes.is_empty() {
-        format!("发现新版本 v{version}，是否下载并安装？\n\n安装完成后应用将自动重启。")
-    } else {
-        format!("发现新版本 v{version}：\n\n{notes}\n\n是否下载并安装？\n安装完成后应用将自动重启。")
-    };
 
-    app.dialog()
-        .message(message)
-        .title("Workbench 更新")
-        .kind(tauri_plugin_dialog::MessageDialogKind::Info)
-        .buttons(tauri_plugin_dialog::MessageDialogButtons::OkCancel)
-        .show(move |result| {
-            if result {
-                tauri::async_runtime::spawn(async move {
-                    match update.download_and_install(|_, _| {}, || {}).await {
-                        Ok(_) => app.restart(),
-                        Err(e) => eprintln!("[csworkbench] 更新下载/安装失败: {e}"),
-                    }
-                });
-            }
-        });
+    // 存起来，等用户在前端弹窗点「立即更新」后由 install_update 取用。
+    *app.state::<PendingUpdate>().0.lock().unwrap() = Some(update);
+
+    let _ = app.emit(
+        "update://available",
+        UpdateAvailable {
+            version: version.clone(),
+            notes,
+        },
+    );
     Ok(format!("发现新版本 v{version}"))
+}
+
+/// 设置页「检查更新」按钮入口（web 版无 __TAURI__ 时按钮被前端隐藏）。
+/// channel 可选："stable"（默认）/ "preview"。只检查并广播，不弹原生框。
+#[tauri::command]
+async fn check_for_updates(
+    app: tauri::AppHandle,
+    channel: Option<String>,
+) -> Result<String, String> {
+    let channel = channel.as_deref().unwrap_or("stable");
+    check_and_notify(&app, channel).await
+}
+
+/// 启动后静默自动检查更新：有新版 → 弹前端统一弹窗；已是最新 → 不打扰；
+/// 网络失败 → 静默，1 分钟后再试，直到拿到结果。
+/// 由前端页面加载时调用（传当前更新渠道）。全程只允许一个检查循环（AutoCheckStarted 防重）。
+#[tauri::command]
+async fn start_auto_check(app: tauri::AppHandle, channel: Option<String>) -> Result<(), String> {
+    {
+        let mut started = app.state::<AutoCheckStarted>().0.lock().unwrap();
+        if *started {
+            return Ok(()); // 已有循环在跑，避免页面切换重复启动
+        }
+        *started = true;
+    }
+    let channel = channel.unwrap_or_else(|| "stable".to_string());
+    tauri::async_runtime::spawn(async move {
+        loop {
+            match check_and_notify(&app, &channel).await {
+                Ok(_) => return,   // 已是最新 or 已广播新版，结束本轮
+                Err(_) => {
+                    // 网络不通：静默重试（1 分钟间隔），直到成功或应用退出。
+                    tokio::time::sleep(Duration::from_secs(60)).await;
+                }
+            }
+        }
+    });
+    Ok(())
+}
+
+/// 前端弹窗点「立即更新」后调用：取出检查到的新版本，下载安装并重启。
+/// 下载进度通过 update://download-progress 事件广播给前端弹窗展示。
+#[tauri::command]
+async fn install_update(app: tauri::AppHandle) -> Result<(), String> {
+    let update = app
+        .state::<PendingUpdate>()
+        .0
+        .lock()
+        .unwrap()
+        .take()
+        .ok_or_else(|| "没有待安装的更新".to_string())?;
+
+    let app_emit = app.clone();
+    // 进度回调：把下载进度广播给前端（弹窗进度条）。
+    // download_and_install 的第一个闭包收到 (已下载, 总字节 Option)。
+    // total 为 None（未知）时只提示等待；Some 时算百分比。
+    let progress = move |current: usize, total: Option<u64>| {
+        let current = current as u64;
+        let (total, percent) = match total {
+            Some(t) if t > 0 => (t, (current as f32 / t as f32) * 100.0),
+            _ => (0, 0.0),
+        };
+        let _ = app_emit.emit(
+            "update://download-progress",
+            UpdateProgress { current, total, percent },
+        );
+    };
+    let installed = update.download_and_install(progress, || {}).await;
+    let _ = app_emit.emit("update://download-done", ());
+    match installed {
+        Ok(_) => {
+            app.restart();
+            Ok(())
+        }
+        Err(e) => Err(format!("更新下载/安装失败：{e}")),
+    }
 }
 
 /// 设置页「检查更新」按钮入口（web 版无 __TAURI__ 时按钮被前端隐藏）。
@@ -170,16 +259,16 @@ pub fn run() {
         .plugin(tauri_plugin_shell::init())
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_updater::Builder::new().build())
-        .invoke_handler(tauri::generate_handler![check_for_updates])
+        .invoke_handler(tauri::generate_handler![
+            check_for_updates,
+            start_auto_check,
+            install_update
+        ])
         .manage(Sidecar(Mutex::new(None)))
+        .manage(PendingUpdate(Mutex::new(None)))
+        .manage(AutoCheckStarted(Mutex::new(false)))
         .setup(|app| {
-            // 启动后延迟几秒静默检查一次更新（正式渠道）;离线失败静默,发现新版才弹提示。
-            let updater_handle = app.handle().clone();
-            tauri::async_runtime::spawn(async move {
-                tokio::time::sleep(Duration::from_secs(5)).await;
-                let _ = check_and_prompt(updater_handle, "stable").await;
-            });
-
+            // 自动检查更新由前端页面加载时调 start_auto_check 触发（能读取当前更新渠道）。
             let handle = app.handle().clone();
             let dir = data_dir(app);
             std::fs::create_dir_all(&dir).ok();

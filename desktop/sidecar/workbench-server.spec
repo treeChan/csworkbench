@@ -46,6 +46,10 @@ hiddenimports += ["greenlet"]
 datas.append((str(APP / "templates"), "app/templates"))
 datas.append((str(APP / "static"), "app/static"))
 
+# 版本号唯一源:仓库根 VERSION 打进 _MEIPASS/VERSION,config.py 运行时直接读它
+# (web 版读项目根 VERSION,桌面版读打包进来的这份,两端始终一致)
+datas.append((str(REPO / "VERSION"), "."))
+
 a = Analysis(
     [str(ROOT / "entry.py")],
     pathex=[str(REPO)],  # 让 `import app` 可解析

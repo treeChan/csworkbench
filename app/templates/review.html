@@ -2,15 +2,12 @@
 {% block title %}周复盘 · Workbench{% endblock %}
 
 {% block content %}
-<div class="breadcrumb">
-    <a href="/">首页</a>
-    <span class="sep">/</span> 周复盘
-</div>
-
 <div class="today-header">
-    <h1>📅 周复盘</h1>
-    <a href="/review/new" class="btn btn-primary"
-       style="margin-left: auto;">+ 新建本周复盘</a>
+    <div class="warroom-title">
+        <h1>📅 周复盘</h1>
+        <span class="today-date">共 {{ reviews|length }} 篇</span>
+    </div>
+    <a href="/review/new" class="btn btn-primary">+ 新建本周复盘</a>
 </div>
 
 <div class="alert" style="background: var(--c-primary-bg); color: var(--c-primary); border-left: 3px solid var(--c-primary); font-size: 13px;">

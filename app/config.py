@@ -17,8 +17,11 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 # 项目根目录 = workbench/（app/ 的父目录）
 BASE_DIR = Path(__file__).resolve().parent.parent
 
-# 当前应用版本（main.py 的 FastAPI version 与桌面端 tauri/Cargo 与此保持一致）
-APP_VERSION = "0.4.4"
+# 版本号唯一源：仓库根目录 VERSION 文件（一行 semver，如 0.4.4）。
+# 运行时直接读它，不设兜底常量——桌面端打包时 VERSION 由 PyInstaller spec 打进
+# _MEIPASS/VERSION（web 版就是项目根），读不到说明打包/部署缺文件，应立刻暴露而不是
+# 静默用一个错版本。Cargo.toml / package.json 由 scripts/sync_version.py 从 VERSION 同步。
+APP_VERSION = (BASE_DIR / "VERSION").read_text(encoding="utf-8").strip()
 
 # 项目开源协议（SPDX 标识；根目录 LICENSE 文件为 MPL 2.0 全文）
 APP_LICENSE = "MPL-2.0"
