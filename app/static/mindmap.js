@@ -290,6 +290,8 @@
             "data-kind": node.kind,
             "data-shape": node.shape_type,
             "data-font-size": String(node.font_size != null ? node.font_size : 13),
+            "data-w": String(node.w),
+            "data-h": String(node.h),
             transform: `translate(${node.x},${node.y})`,
         };
         if (node.parent_id != null) attrs["data-parent"] = String(node.parent_id);
@@ -571,11 +573,13 @@
         const y = m ? parseFloat(m[2]) : 0;
         const w = parseFloat(selectedNode.getAttribute("data-w") || "120");
         const h = parseFloat(selectedNode.getAttribute("data-h") || "60");
+        // 锚点向外推 8px, 让圆点完全在节点轮廓外 (避免视觉上"压"在边上)
+        const offset = 8;
         const pts = [
-            { side: "t", cx: x + w / 2, cy: y },
-            { side: "r", cx: x + w,     cy: y + h / 2 },
-            { side: "b", cx: x + w / 2, cy: y + h },
-            { side: "l", cx: x,         cy: y + h / 2 },
+            { side: "t", cx: x + w / 2,       cy: y - offset },
+            { side: "r", cx: x + w + offset, cy: y + h / 2 },
+            { side: "b", cx: x + w / 2,       cy: y + h + offset },
+            { side: "l", cx: x - offset,     cy: y + h / 2 },
         ];
         pts.forEach(function (p) {
             const c = document.createElementNS(NS_SVG, "circle");
@@ -936,7 +940,9 @@
         linkMode = { sourceId: null, sourceNodeEl: null };
         document.body.classList.add("mm-link-mode");
         if (linkBtn) linkBtn.classList.add("mm-active");
-        showToast("连线模式：点第一个节点作为起点", "info");
+        // 进入连线模式: 如果有选中节点, 立即把它的锚点画出来 (否则要等下次点节点才显示)
+        renderAnchors();
+        showToast("连线模式：点第一个节点作为起点（Shift+Esc 退出）", "info");
     }
     function exitLinkMode() {
         linkMode = null;
@@ -944,6 +950,8 @@
         if (linkBtn) linkBtn.classList.remove("mm-active");
         // 清空临时连线
         if (tempEdgeLayer) tempEdgeLayer.textContent = "";
+        // 退出连线模式: 立即清掉锚点
+        renderAnchors();
     }
     function handleLinkModeClick(nodeEl) {
         if (!linkMode) return false;
@@ -1726,95 +1734,167 @@
     });
 
     // ===================================================================
-    // 导出 PNG: 克隆 SVG → 移除网格/锚点/选中态 → 内联 CSS → bbox 适配 → 序列化成 dataURL → canvas → 下载
+    // 导出 PNG: 自己构造纯 SVG (不依赖 foreignObject), 然后 Image → Canvas → 下载
+    // 避开 foreignObject 是因为 Chrome 在 Image → Canvas 路径下对它的渲染支持很差
     // ===================================================================
     async function exportPNG() {
         setSaveState("saving");
         try {
-            const clone = svg.cloneNode(true);
-
-            // 去掉背景网格
-            const gridBg = clone.querySelector(".mm-grid-bg");
-            if (gridBg) gridBg.parentNode.removeChild(gridBg);
-            // 去掉锚点层 + 临时连线层 (导出图不需要)
-            ["#mm-anchors-layer", "#mm-temp-edge-layer"].forEach(function (sel) {
-                const el = clone.querySelector(sel);
-                if (el && el.parentNode) el.parentNode.removeChild(el);
-            });
-            // 去掉当前选中态 (selected class + 框选)
-            clone.querySelectorAll(".selected").forEach(function (el) { el.classList.remove("selected"); });
-            const mq = clone.querySelector(".mm-marquee");
-            if (mq && mq.parentNode) mq.parentNode.removeChild(mq);
-
-            // 计算 viewBox (所有节点的 bbox, 加 padding)
-            let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
-            clone.querySelectorAll(".mm-node").forEach(function (g) {
-                const t = g.getAttribute("transform") || "";
+            // 1) 收集节点 + 连线数据 (从当前 DOM 拿真实位置/尺寸)
+            const nodeList = [];
+            nodeById.forEach(function (el) {
+                const t = el.getAttribute("transform") || "";
                 const m = t.match(/translate\(([-\d.]+),([-\d.]+)\)/);
                 const x = m ? parseFloat(m[1]) : 0;
                 const y = m ? parseFloat(m[2]) : 0;
-                const w = parseFloat(g.getAttribute("data-w") || "120");
-                const h = parseFloat(g.getAttribute("data-h") || "60");
-                minX = Math.min(minX, x);
-                minY = Math.min(minY, y);
-                maxX = Math.max(maxX, x + w);
-                maxY = Math.max(maxY, y + h);
+                const w = parseFloat(el.getAttribute("data-w") || "120");
+                const h = parseFloat(el.getAttribute("data-h") || "60");
+                const shapeEl = el.querySelector(".mm-shape");
+                const computed = shapeEl ? window.getComputedStyle(shapeEl) : null;
+                const fill = computed ? computed.fill : "#ffffff";
+                const stroke = computed ? computed.stroke : "#d1d5db";
+                // 标签: 取 foreignObject 里的 .mm-label textContent
+                const lblEl = el.querySelector(".mm-label");
+                let label = lblEl ? (lblEl.textContent || "") : "";
+                // 内联 style 上的 font-size (活动编辑) 优先
+                let fontSize = parseInt(el.getAttribute("data-font-size") || "13", 10);
+                if (lblEl) {
+                    const inline = (lblEl.getAttribute("style") || "").match(/font-size:\s*(\d+)/);
+                    if (inline) fontSize = parseInt(inline[1], 10);
+                }
+                const fontFamily = el.getAttribute("data-font-family") || "system";
+                const parentId = el.getAttribute("data-parent");
+                nodeList.push({
+                    id: parseInt(el.getAttribute("data-id"), 10),
+                    kind: el.getAttribute("data-kind"),
+                    shape: el.getAttribute("data-shape"),
+                    x: x, y: y, w: w, h: h,
+                    label: label,
+                    fontSize: fontSize,
+                    fontFamily: fontFamily,
+                    fill: fill,
+                    stroke: stroke,
+                    parentId: parentId ? parseInt(parentId, 10) : null,
+                });
             });
-            if (!isFinite(minX)) {
+
+            if (nodeList.length === 0) {
                 showToast("画布为空，无可导出的节点", "warn");
                 setSaveState("saved");
                 return;
             }
+
+            const nodeByIdMap = {};
+            nodeList.forEach(function (n) { nodeByIdMap[n.id] = n; });
+
+            // 2) 收集连线
+            const edgeList = [];
+            // auto edges (parent → child)
+            nodeList.forEach(function (n) {
+                if (n.kind === "auto" && n.parentId) {
+                    const p = nodeByIdMap[n.parentId];
+                    if (p) edgeList.push({ source: p, target: n, manual: false });
+                }
+            });
+            // manual edges
+            svg.querySelectorAll(".mm-edge-manual").forEach(function (e) {
+                const sid = parseInt(e.getAttribute("data-source"), 10);
+                const tid = parseInt(e.getAttribute("data-target"), 10);
+                const src = nodeByIdMap[sid], tgt = nodeByIdMap[tid];
+                if (src && tgt) edgeList.push({ source: src, target: tgt, manual: true });
+            });
+
+            // 3) viewBox
+            let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+            nodeList.forEach(function (n) {
+                minX = Math.min(minX, n.x);
+                minY = Math.min(minY, n.y);
+                maxX = Math.max(maxX, n.x + n.w);
+                maxY = Math.max(maxY, n.y + n.h);
+            });
             const padding = 24;
             minX -= padding; minY -= padding;
             maxX += padding; maxY += padding;
             const vbW = maxX - minX;
             const vbH = maxY - minY;
-            // 2x 高清
+
+            // 4) 构造纯 SVG (无 foreignObject, 只用 SVG 基本元素)
             const scale = 2;
-            clone.setAttribute("viewBox", minX + " " + minY + " " + vbW + " " + vbH);
-            clone.setAttribute("width", String(vbW * scale));
-            clone.setAttribute("height", String(vbH * scale));
-            clone.removeAttribute("class");
+            const parts = [];
+            parts.push('<?xml version="1.0" encoding="UTF-8"?>');
+            parts.push('<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" '
+                + 'viewBox="' + minX + ' ' + minY + ' ' + vbW + ' ' + vbH + '" '
+                + 'width="' + Math.ceil(vbW * scale) + '" height="' + Math.ceil(vbH * scale) + '">');
+            // 箭头 marker
+            parts.push('<defs><marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 z" fill="#7C3AED"/></marker></defs>');
 
-            // 内联 CSS (克隆出的 SVG 不会自动加载外部样式表)
-            // 使用具体色值, 不依赖 CSS 变量
-            const cssText = [
-                ".mm-node .mm-shape { stroke: #d1d5db; stroke-width: 1.5; fill: #ffffff; }",
-                ".mm-node.shape-sticky-yellow .mm-shape { fill: #fef9c3; stroke: #facc15; }",
-                ".mm-node.shape-sticky-pink .mm-shape { fill: #fce7f3; stroke: #f472b6; }",
-                ".mm-node.shape-sticky-blue .mm-shape { fill: #dbeafe; stroke: #60a5fa; }",
-                ".mm-node .mm-label { display:flex; align-items:center; justify-content:center; width:100%; height:100%; padding:4px; box-sizing:border-box; text-align:center; line-height:1.3; color:#1f2937; word-break:break-word; }",
-                ".mm-edge { fill: none; stroke: #d1d5db; stroke-width: 1.5; }",
-                ".mm-edge.mm-edge-auto { stroke: #A78BFA; opacity: 0.55; }",
-                ".mm-edge.mm-edge-manual { stroke: #7C3AED; stroke-width: 2; }",
-                ".mm-edge.mm-edge-temp { display: none; }",
-            ].join("\n");
-            const styleEl = document.createElementNS(NS_SVG, "style");
-            styleEl.setAttribute("type", "text/css");
-            styleEl.textContent = cssText;
-            clone.insertBefore(styleEl, clone.firstChild);
-
-            // marker 的 currentColor 在克隆里不可靠, 给箭头一个明确颜色
-            clone.querySelectorAll("marker path").forEach(function (p) {
-                p.setAttribute("fill", "#7C3AED");
+            // 5) 边 (auto 在底层, manual 在上层)
+            edgeList.forEach(function (e) {
+                const sx = e.source.x + e.source.w, sy = e.source.y + e.source.h / 2;
+                const tx = e.target.x, ty = e.target.y + e.target.h / 2;
+                const mid = (sx + tx) / 2;
+                const d = "M " + sx + "," + sy + " C " + mid + "," + sy + " " + mid + "," + ty + " " + tx + "," + ty;
+                if (e.manual) {
+                    parts.push('<path d="' + d + '" stroke="#7C3AED" stroke-width="2" fill="none" marker-end="url(#arrow)"/>');
+                } else {
+                    parts.push('<path d="' + d + '" stroke="#A78BFA" stroke-width="1.5" fill="none" opacity="0.55"/>');
+                }
             });
 
-            // 序列化
-            const svgString = new XMLSerializer().serializeToString(clone);
-            const svgBlob = new Blob(
-                ['<?xml version="1.0" encoding="UTF-8"?>\n', svgString],
-                { type: "image/svg+xml;charset=utf-8" }
-            );
-            const url = URL.createObjectURL(svgBlob);
+            // 6) 节点 (用 <text> 替代 foreignObject; 多行拆成多个 <tspan>)
+            function escXml(s) {
+                return String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+            }
+            nodeList.forEach(function (n) {
+                const w = n.w, h = n.h;
+                parts.push('<g transform="translate(' + n.x + ',' + n.y + ')">');
+                // 形状
+                if (n.shape === "ellipse") {
+                    parts.push('<ellipse cx="' + w/2 + '" cy="' + h/2 + '" rx="' + w/2 + '" ry="' + h/2 + '" stroke="' + n.stroke + '" stroke-width="1.5" fill="' + n.fill + '"/>');
+                } else if (n.shape === "diamond") {
+                    parts.push('<polygon points="' + w/2 + ',0 ' + w + ',' + h/2 + ' ' + w/2 + ',' + h + ' 0,' + h/2 + '" stroke="' + n.stroke + '" stroke-width="1.5" fill="' + n.fill + '"/>');
+                } else if (n.shape === "hexagon") {
+                    const cut = Math.min(20, w / 4);
+                    parts.push('<polygon points="' + cut + ',0 ' + (w-cut) + ',0 ' + w + ',' + h/2 + ' ' + (w-cut) + ',' + h + ' ' + cut + ',' + h + ' 0,' + h/2 + '" stroke="' + n.stroke + '" stroke-width="1.5" fill="' + n.fill + '"/>');
+                } else if (n.shape === "arrow") {
+                    parts.push('<polygon points="0,' + h*0.3 + ' ' + w*0.7 + ',' + h*0.3 + ' ' + w*0.7 + ',0 ' + w + ',' + h/2 + ' ' + w*0.7 + ',' + h + ' ' + w*0.7 + ',' + h*0.7 + ' 0,' + h*0.7 + '" stroke="' + n.stroke + '" stroke-width="1.5" fill="' + n.fill + '"/>');
+                } else {
+                    // rect / rounded / sticky-* / text
+                    let rx = "4";
+                    if (n.shape === "rounded") rx = "12";
+                    else if (n.shape && n.shape.indexOf("sticky-") === 0) rx = "6";
+                    parts.push('<rect width="' + w + '" height="' + h + '" rx="' + rx + '" stroke="' + n.stroke + '" stroke-width="1.5" fill="' + n.fill + '"/>');
+                }
+                // 文字: 多行拆 tspan, 居中
+                const lines = (n.label || "").split(/\r?\n/).filter(function (l) { return l.length > 0 || lines.length === 1; });
+                const safeLines = lines.length > 0 ? lines : [""];
+                const family = FONT_STACKS[n.fontFamily] || FONT_STACKS.system;
+                // 估算行高
+                const lineHeight = n.fontSize * 1.25;
+                const totalH = safeLines.length * lineHeight;
+                // 首行 y: 垂直居中起点 (dominant-baseline 在 Chrome canvas 里支持度不一, 直接算 y)
+                let startY = (h - totalH) / 2 + n.fontSize * 0.9;
+                parts.push('<text x="' + (w/2) + '" y="' + startY + '" text-anchor="middle" font-family="' + family + '" font-size="' + n.fontSize + '" fill="#1f2937">');
+                safeLines.forEach(function (line, idx) {
+                    const dy = idx === 0 ? 0 : lineHeight;
+                    parts.push('<tspan x="' + (w/2) + '" dy="' + dy + '">' + escXml(line) + '</tspan>');
+                });
+                parts.push('</text>');
+                parts.push('</g>');
+            });
 
+            parts.push('</svg>');
+            const svgString = parts.join("");
+
+            // 7) 渲染到 canvas
+            const svgBlob = new Blob([svgString], { type: "image/svg+xml;charset=utf-8" });
+            const url = URL.createObjectURL(svgBlob);
             const img = new Image();
             img.onload = function () {
                 const canvas = document.createElement("canvas");
                 canvas.width = Math.ceil(vbW * scale);
                 canvas.height = Math.ceil(vbH * scale);
                 const ctx = canvas.getContext("2d");
-                // 白底 (PNG 透明背景不好看)
                 ctx.fillStyle = "#ffffff";
                 ctx.fillRect(0, 0, canvas.width, canvas.height);
                 ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
@@ -1840,7 +1920,10 @@
             };
             img.onerror = function () {
                 URL.revokeObjectURL(url);
-                showToast("导出失败：SVG 渲染失败（可能是字体或 foreignObject 问题）", "error");
+                // 输出 SVG 字符串到 console + 暴露到 window, 方便调试
+                window.__lastExportError = svgString;
+                console.error("PNG export failed. SVG string saved to window.__lastExportError (length=" + svgString.length + ")");
+                showToast("导出失败：SVG 转图片失败。SVG 已存到 window.__lastExportError 控制台可看", "error");
                 setSaveState("error");
             };
             img.src = url;
