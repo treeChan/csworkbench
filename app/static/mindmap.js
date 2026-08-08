@@ -940,14 +940,21 @@
         linkMode = { sourceId: null, sourceNodeEl: null };
         document.body.classList.add("mm-link-mode");
         if (linkBtn) linkBtn.classList.add("mm-active");
+        // 顶部 banner 提示
+        const banner = document.getElementById("mm-link-banner");
+        if (banner) banner.hidden = false;
         // 进入连线模式: 如果有选中节点, 立即把它的锚点画出来 (否则要等下次点节点才显示)
         renderAnchors();
-        showToast("连线模式：点第一个节点作为起点（Shift+Esc 退出）", "info");
+        showToast("连线模式：点第一个节点作为起点", "info");
     }
     function exitLinkMode() {
+        if (!linkMode) return;
         linkMode = null;
         document.body.classList.remove("mm-link-mode");
         if (linkBtn) linkBtn.classList.remove("mm-active");
+        // 隐藏 banner
+        const banner = document.getElementById("mm-link-banner");
+        if (banner) banner.hidden = true;
         // 清空临时连线
         if (tempEdgeLayer) tempEdgeLayer.textContent = "";
         // 退出连线模式: 立即清掉锚点
@@ -1866,8 +1873,8 @@
                     parts.push('<rect width="' + w + '" height="' + h + '" rx="' + rx + '" stroke="' + n.stroke + '" stroke-width="1.5" fill="' + n.fill + '"/>');
                 }
                 // 文字: 多行拆 tspan, 居中
-                const lines = (n.label || "").split(/\r?\n/).filter(function (l) { return l.length > 0 || lines.length === 1; });
-                const safeLines = lines.length > 0 ? lines : [""];
+                const rawLines = (n.label || "").split(/\r?\n/);
+                const safeLines = rawLines.length > 0 ? rawLines : [""];
                 const family = FONT_STACKS[n.fontFamily] || FONT_STACKS.system;
                 // 估算行高
                 const lineHeight = n.fontSize * 1.25;

@@ -1328,6 +1328,27 @@ button.pipeline-step:focus { outline: 2px solid var(--c-primary-light); outline-
     fill: var(--c-primary, #7C3AED);
     stroke: var(--c-primary, #7C3AED);
 }
+
+/* 手动节点默认描边色 (用主题色而不是浅灰, 避免远看像没边框) */
+.mm-node.kind-manual .mm-shape {
+    fill: var(--c-surface, #fff);
+    stroke: var(--c-primary, #7C3AED);
+    stroke-width: 1.5px;
+}
+
+/* 手动节点选中态: 明显换底色, 一眼能看出选中了 */
+.mm-node.kind-manual.selected .mm-shape {
+    fill: var(--c-primary-bg, #f3e8ff);
+    stroke-width: 2.5px;
+}
+
+/* 自动节点选中态: 因为描边本来就是紫色, 加粗 + 加 dashed 不明显,
+   改成更明显的 3px + 用更深色 + 加 filter 阴影 */
+.mm-node.kind-auto.selected .mm-shape {
+    stroke-width: 3px;
+    stroke: var(--c-primary-dark, #5B21B6);
+    filter: drop-shadow(0 0 4px rgba(124, 58, 237, 0.4));
+}
 .mm-node.kind-auto.project .mm-label {
     color: #fff;
     font-weight: 600;
@@ -1499,6 +1520,29 @@ button.pipeline-step:focus { outline: 2px solid var(--c-primary-light); outline-
 }
 .mm-link-mode .mm-node {
     cursor: crosshair !important;
+}
+/* link mode 提示条: 在画布顶部中央显示, 用户一眼能看到当前模式 */
+.mm-link-banner {
+    position: absolute;
+    top: 12px;
+    left: 50%;
+    transform: translateX(-50%);
+    background: var(--c-primary, #7C3AED);
+    color: #fff;
+    padding: 8px 16px;
+    border-radius: 6px;
+    font-size: 13px;
+    z-index: 100;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+.mm-link-banner kbd {
+    background: rgba(255, 255, 255, 0.25);
+    padding: 1px 6px;
+    border-radius: 3px;
+    font-size: 12px;
 }
 
 /* ---- 字体按钮（每个按钮带自己字体的预览） ---- */
