@@ -59,6 +59,22 @@
         mono:   'ui-monospace, "SF Mono", Menlo, Consolas, monospace',
     };
 
+    // 取节点尺寸 (从 data-w/data-h 读, 兼容旧的 .mm-shape width/height)
+    // 椭圆/菱形/六边形/箭头 不是 <rect>, .mm-shape 上没有 width/height 属性
+    function getNodeSize(el) {
+        const w = parseFloat(el.getAttribute("data-w") || "0");
+        const h = parseFloat(el.getAttribute("data-h") || "0");
+        if (w > 0 && h > 0) return { w: w, h: h };
+        // 兜底: 尝试从 .mm-shape 读 (仅 rect 有效)
+        const shape = el.querySelector(".mm-shape");
+        if (shape) {
+            const sw = parseFloat(shape.getAttribute("width") || "120");
+            const sh = parseFloat(shape.getAttribute("height") || "60");
+            return { w: sw, h: sh };
+        }
+        return { w: 120, h: 60 };
+    }
+
     // ---- 初始化节点索引 ----
     function indexNodes() {
         nodeById.clear();
@@ -385,8 +401,8 @@
                 label: el.querySelector(".mm-label")?.textContent || "",
                 x: tm ? parseFloat(tm[1]) : 0,
                 y: tm ? parseFloat(tm[2]) : 0,
-                w: parseFloat(el.querySelector(".mm-shape")?.getAttribute("width") || 120),
-                h: parseFloat(el.querySelector(".mm-shape")?.getAttribute("height") || 60),
+                w: getNodeSize(el).w,
+                h: getNodeSize(el).h,
                 z_index: parseInt(el.getAttribute("data-z") || "0", 10),
                 font_size: parseInt(el.getAttribute("data-font-size") || "13", 10),
                 font_family: el.getAttribute("data-font-family") || "system",
@@ -611,13 +627,14 @@
         const sM = sT.match(/translate\(([-\d.]+),([-\d.]+)\)/);
         const sx = sM ? parseFloat(sM[1]) : 0;
         const sy = sM ? parseFloat(sM[2]) : 0;
-        const sw = parseFloat(src.querySelector(".mm-shape")?.getAttribute("width") || 120);
-        const sh = parseFloat(src.querySelector(".mm-shape")?.getAttribute("height") || 60);
+        const sSize = getNodeSize(src);
+        const tSize = getNodeSize(tgt);
+        const sw = sSize.w, sh = sSize.h;
         const tT = tgt.getAttribute("transform") || "";
         const tM = tT.match(/translate\(([-\d.]+),([-\d.]+)\)/);
         const tx = tM ? parseFloat(tM[1]) : 0;
         const ty = tM ? parseFloat(tM[2]) : 0;
-        const th = parseFloat(tgt.querySelector(".mm-shape")?.getAttribute("height") || 60);
+        const th = tSize.h;
         const x1 = sx + sw, y1 = sy + sh / 2;
         const x2 = tx,      y2 = ty + th / 2;
         const midX = (x1 + x2) / 2;
@@ -985,21 +1002,15 @@
             const labelDiv = el.querySelector(".mm-label");
             if (labelDiv && labelDiv.classList.contains("editing")) return;
 
-            // 连线模式下：把点击交给 link-mode 处理（不进入拖拽）
-            if (linkMode) {
-                e.stopPropagation();
-                handleLinkModeClick(el);
-                return;
-            }
-
+            // 注意: 即使在 link mode 下也走完整的 selectNode + dragState 流程.
+            // 拖动和连线不冲突. mouseup 时如果没移动过, 才把这次点击当作 link-mode 的"选节点"操作.
             e.stopPropagation();
 
             // Shift+点击 → 多选切换
             if (e.shiftKey) {
                 selectNode(el, { additive: true });
-            } else if (!selectedNodes.has(el) && selectedNodes.size > 0) {
-                // 已有多选, 点击未选中的节点 → 加入多选并继续拖
-                selectNode(el, { additive: true });
+            } else if (selectedNodes.has(el)) {
+                // 点击已选中的节点 → 保持当前多选状态, 不清空 (Figma 行为)
             } else {
                 // 普通点击: 单选 (清空其他)
                 selectNode(el);
@@ -1026,6 +1037,7 @@
                 startX: e.clientX,
                 startY: e.clientY,
                 moved: false,
+                fromLinkMode: !!linkMode,  // 记录: 是否从 link mode 进入, mouseup 时决定要不要触发连线
             };
 
             function onMove(ev) {
@@ -1034,7 +1046,6 @@
                 const dy = ev.clientY - dragState.startY;
                 if (Math.abs(dx) + Math.abs(dy) > 2) dragState.moved = true;
                 dragState.items.forEach(function (it) {
-                    if (it.kind === "auto") return;  // auto 节点位置由 parent 决定, 不让拖
                     const nx = Math.max(0, it.origX + dx);
                     const ny = Math.max(0, it.origY + dy);
                     it.el.setAttribute("transform", "translate(" + nx + "," + ny + ")");
@@ -1049,8 +1060,12 @@
             function onUp() {
                 document.removeEventListener("mousemove", onMove);
                 document.removeEventListener("mouseup", onUp);
-                if (dragState && dragState.moved) {
+                const ds = dragState;
+                if (ds && ds.moved) {
                     flushPositions();
+                } else if (ds && ds.fromLinkMode && linkMode) {
+                    // 没拖动 → 这次 mousedown 视为 link-mode 的"选节点"操作
+                    handleLinkModeClick(el);
                 }
                 dragState = null;
             }
@@ -1178,8 +1193,8 @@
                 shape_type: selectedNode.getAttribute("data-shape"),
                 label: selectedNode.querySelector(".mm-label").textContent,
                 x: ox, y: oy,
-                w: parseFloat(selectedNode.querySelector(".mm-shape")?.getAttribute("width") || 120),
-                h: parseFloat(selectedNode.querySelector(".mm-shape")?.getAttribute("height") || 60),
+                w: getNodeSize(selectedNode).w,
+                h: getNodeSize(selectedNode).h,
                 kind: selectedNode.getAttribute("data-kind"),
             };
             // auto 节点不进剪贴板（它跟源数据绑定的）
@@ -1220,12 +1235,12 @@
             const pm = (parent.getAttribute("transform") || "").match(/translate\(([-\d.]+),([-\d.]+)\)/);
             if (!pm) return;
             const px = parseFloat(pm[1]), py = parseFloat(pm[2]);
-            const pw = parseFloat(parent.querySelector(".mm-shape")?.getAttribute("width") || 120);
-            const ph = parseFloat(parent.querySelector(".mm-shape")?.getAttribute("height") || 60);
+            const pSize = getNodeSize(parent);
+            const pw = pSize.w, ph = pSize.h;
             const cm = (el.getAttribute("transform") || "").match(/translate\(([-\d.]+),([-\d.]+)\)/);
             if (!cm) return;
             const cx = parseFloat(cm[1]), cy = parseFloat(cm[2]);
-            const ch = parseFloat(el.querySelector(".mm-shape")?.getAttribute("height") || 60);
+            const ch = getNodeSize(el).h;
             const x1 = px + pw, y1 = py + ph / 2, x2 = cx, y2 = cy + ch / 2;
             const mid = (x1 + x2) / 2;
             const path = document.createElementNS(NS_SVG, "path");
@@ -1246,10 +1261,10 @@
             const tm = (tgt.getAttribute("transform") || "").match(/translate\(([-\d.]+),([-\d.]+)\)/);
             if (!sm || !tm) return;
             const sx = parseFloat(sm[1]), sy = parseFloat(sm[2]);
-            const sw = parseFloat(src.querySelector(".mm-shape")?.getAttribute("width") || 120);
-            const sh = parseFloat(src.querySelector(".mm-shape")?.getAttribute("height") || 60);
+            const sSize = getNodeSize(src);
+            const sw = sSize.w, sh = sSize.h;
             const tx = parseFloat(tm[1]), ty = parseFloat(tm[2]);
-            const th = parseFloat(tgt.querySelector(".mm-shape")?.getAttribute("height") || 60);
+            const th = getNodeSize(tgt).h;
             const x1 = sx + sw, y1 = sy + sh / 2, x2 = tx, y2 = ty + th / 2;
             const mid = (x1 + x2) / 2;
             el.setAttribute("d", "M " + x1 + "," + y1 + " C " + mid + "," + y1 + " " + mid + "," + y2 + " " + x2 + "," + y2);
@@ -1269,10 +1284,10 @@
             const tm = (tgt.getAttribute("transform") || "").match(/translate\(([-\d.]+),([-\d.]+)\)/);
             if (!sm || !tm) return;
             const sx = parseFloat(sm[1]), sy = parseFloat(sm[2]);
-            const sw = parseFloat(src.querySelector(".mm-shape")?.getAttribute("width") || 120);
-            const sh = parseFloat(src.querySelector(".mm-shape")?.getAttribute("height") || 60);
+            const sSize = getNodeSize(src);
+            const sw = sSize.w, sh = sSize.h;
             const tx = parseFloat(tm[1]), ty = parseFloat(tm[2]);
-            const th = parseFloat(tgt.querySelector(".mm-shape")?.getAttribute("height") || 60);
+            const th = getNodeSize(tgt).h;
             const x1 = sx + sw, y1 = sy + sh / 2, x2 = tx, y2 = ty + th / 2;
             const mid = (x1 + x2) / 2;
             el.setAttribute("d", "M " + x1 + "," + y1 + " C " + mid + "," + y1 + " " + mid + "," + y2 + " " + x2 + "," + y2);
@@ -1881,7 +1896,8 @@
                 const totalH = safeLines.length * lineHeight;
                 // 首行 y: 垂直居中起点 (dominant-baseline 在 Chrome canvas 里支持度不一, 直接算 y)
                 let startY = (h - totalH) / 2 + n.fontSize * 0.9;
-                parts.push('<text x="' + (w/2) + '" y="' + startY + '" text-anchor="middle" font-family="' + family + '" font-size="' + n.fontSize + '" fill="#1f2937">');
+                // family 必须 XML 转义 (含双引号会破坏 font-family="..." 边界)
+                parts.push('<text x="' + (w/2) + '" y="' + startY + '" text-anchor="middle" font-family="' + escXml(family) + '" font-size="' + n.fontSize + '" fill="#1f2937">');
                 safeLines.forEach(function (line, idx) {
                     const dy = idx === 0 ? 0 : lineHeight;
                     parts.push('<tspan x="' + (w/2) + '" dy="' + dy + '">' + escXml(line) + '</tspan>');
