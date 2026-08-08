@@ -1223,3 +1223,194 @@ def restore_settings(backup: UploadFile = File(...)):
     finally:
         Path(tmp).unlink(missing_ok=True)
     return RedirectResponse("/settings?saved=restore", status_code=303)
+
+
+# ---------------------------------------------------------------------------
+# 思维导图（Mind Map）
+# ---------------------------------------------------------------------------
+
+
+@router.get("/mindmap", response_class=HTMLResponse)
+def mindmap_list(request: Request, db: Session = Depends(get_db)) -> HTMLResponse:
+    """思维导图项目选择页：列出所有项目，每个项目一张导图。"""
+    projects = crud.list_projects(db)
+    experiment_counts = {p.id: crud.count_experiments(db, p.id) for p in projects}
+    return render(
+        request, "mindmap_list.html",
+        {
+            "active_nav": "mindmap",
+            "projects": projects,
+            "experiment_counts": experiment_counts,
+        },
+    )
+
+
+def _render_mindmap_node(node) -> str:
+    """把一个节点序列化成 SVG <g> 字符串。"""
+    # 转义 XML 特殊字符
+    from xml.sax.saxutils import escape as xml_escape
+    safe_label = xml_escape(node.label or "")
+    safe_id = xml_escape(str(node.id))
+    kind_cls = f"kind-{node.kind}"
+    shape_cls = f"shape-{node.shape_type}"
+    x = float(node.x)
+    y = float(node.y)
+    w = float(node.w)
+    h = float(node.h)
+
+    # z_index / parent_id 也塞进 data 属性，方便前端拖拽重绘连线 + 置顶置底
+    parent_attr = f' data-parent="{node.parent_id}"' if node.parent_id else ""
+    z_attr = f' data-z="{node.z_index}"'
+
+    g_open = (
+        f'<g class="mm-node {kind_cls} {shape_cls}" '
+        f'data-id="{safe_id}" '
+        f'data-kind="{xml_escape(node.kind)}" '
+        f'data-shape="{xml_escape(node.shape_type)}"'
+        f'{parent_attr}{z_attr} '
+        f'transform="translate({x},{y})">'
+    )
+
+    # 形状部分
+    shape_svg = ""
+    if node.shape_type == "ellipse":
+        rx, ry = w / 2, h / 2
+        shape_svg = f'<ellipse cx="{rx}" cy="{ry}" rx="{rx}" ry="{ry}" class="mm-shape"/>'
+    elif node.shape_type == "diamond":
+        shape_svg = (
+            f'<polygon points="{w/2},0 {w},{h/2} {w/2},{h} 0,{h/2}" class="mm-shape"/>'
+        )
+    elif node.shape_type == "hexagon":
+        # 六边形（左右各切一个角）
+        cut = min(20.0, w / 4)
+        shape_svg = (
+            f'<polygon points="{cut},0 {w-cut},0 {w},{h/2} {w-cut},{h} {cut},{h} 0,{h/2}" '
+            f'class="mm-shape"/>'
+        )
+    elif node.shape_type == "arrow":
+        # 箭头形（五边形）
+        shape_svg = (
+            f'<polygon points="0,{h*0.3} {w*0.7},{h*0.3} {w*0.7},0 {w},{h/2} '
+            f'{w*0.7},{h} {w*0.7},{h*0.7} 0,{h*0.7}" class="mm-shape"/>'
+        )
+    elif node.shape_type == "text":
+        # 纯文本框：无背景
+        shape_svg = ""
+    else:
+        # rect / rounded / sticky-*：默认矩形 + rx
+        rx = "12" if node.shape_type == "rounded" else "4"
+        if node.shape_type.startswith("sticky-"):
+            rx = "6"
+        shape_svg = f'<rect width="{w}" height="{h}" rx="{rx}" class="mm-shape"/>'
+
+    # 文字部分（foreignObject 支持多行 + 居中）
+    font_size = int(getattr(node, "font_size", 13) or 13)
+    # 防止有人手填了 0/负值/超大值
+    if font_size < 8:
+        font_size = 8
+    elif font_size > 96:
+        font_size = 96
+    font_family = getattr(node, "font_family", None) or "system"
+    # 容错：未知值回退到 system（前端 CSS 也有兜底）
+    from app.schemas import FONT_FAMILIES
+    family_stack = FONT_FAMILIES.get(font_family, FONT_FAMILIES["system"])
+    text_svg = (
+        f'<foreignObject x="0" y="0" width="{w}" height="{h}">'
+        f'<div xmlns="http://www.w3.org/1999/xhtml" '
+        f'class="mm-label" '
+        f'style="font-size:{font_size}px;font-family:{family_stack}">{safe_label}</div>'
+        f'</foreignObject>'
+    )
+
+    g_close = "</g>"
+    return g_open + shape_svg + text_svg + g_close
+
+
+@router.get("/projects/{project_id}/mindmap", response_class=HTMLResponse)
+def mindmap_editor(
+    project_id: int, request: Request, db: Session = Depends(get_db)
+) -> HTMLResponse:
+    """画布编辑器：服务端渲染首屏 SVG，JS 接管后续交互。"""
+    project = crud.get_project(db, project_id)
+    if project is None:
+        raise HTTPException(404, "Project not found")
+
+    # 进入即触发同步（GET 即 sync，首次访问自动建树）
+    mm = crud.get_or_create_mindmap(db, project_id)
+    diff = crud.sync_auto_tree(db, project_id)
+    nodes = crud.list_nodes(db, mm.id)
+    edges = crud.list_edges(db, mm.id)
+
+    # 服务端渲染 SVG 节点（首屏不空白）
+    nodes_svg = "\n".join(_render_mindmap_node(n) for n in nodes)
+
+    # 自动树连线（父→子）+ 手动连线（source→target）
+    by_id = {n.id: n for n in nodes}
+
+    def _bezier_path(x1: float, y1: float, x2: float, y2: float) -> str:
+        mid_x = (x1 + x2) / 2
+        return f"M {x1},{y1} C {mid_x},{y1} {mid_x},{y2} {x2},{y2}"
+
+    edges_svg_parts: list[str] = []
+
+    # 1) 自动树连线
+    for n in nodes:
+        if n.parent_id and n.parent_id in by_id:
+            p = by_id[n.parent_id]
+            px, py = float(p.x), float(p.y)
+            pw, ph = float(p.w), float(p.h)
+            cx, cy = float(n.x), float(n.y)
+            ch = float(n.h)
+            x1 = px + pw
+            y1 = py + ph / 2
+            x2 = cx
+            y2 = cy + ch / 2
+            edges_svg_parts.append(
+                f'<path class="mm-edge mm-edge-auto" '
+                f'd="{_bezier_path(x1, y1, x2, y2)}" '
+                f'data-source="{p.id}" data-target="{n.id}"/>'
+            )
+
+    # 2) 手动连线（source → target）
+    for e in edges:
+        src = by_id.get(e.source_id)
+        tgt = by_id.get(e.target_id)
+        if src is None or tgt is None:
+            continue  # 节点已被删但 FK CASCADE 漏的边，兜底跳过
+        sx, sy = float(src.x), float(src.y)
+        sw, sh = float(src.w), float(src.h)
+        tx, ty = float(tgt.x), float(tgt.y)
+        th = float(tgt.h)
+        # 源右侧中点 → 目标左侧中点
+        x1, y1 = sx + sw, sy + sh / 2
+        x2, y2 = tx, ty + th / 2
+        marker = ' marker-end="url(#mm-arrow)"' if e.arrow else ""
+        edges_svg_parts.append(
+            f'<path class="mm-edge mm-edge-manual" '
+            f'd="{_bezier_path(x1, y1, x2, y2)}" '
+            f'data-id="{e.id}" '
+            f'data-source="{e.source_id}" data-target="{e.target_id}" '
+            f'data-arrow="{str(e.arrow).lower()}"'
+            f'{marker}/>'
+        )
+
+    edges_svg = "\n".join(edges_svg_parts)
+
+    # 简单统计：auto / manual 节点数 + 手动边数
+    auto_count = sum(1 for n in nodes if n.kind == "auto")
+    manual_count = sum(1 for n in nodes if n.kind == "manual")
+    edge_count = len(edges)
+
+    return render(
+        request, "mindmap_editor.html",
+        {
+            "active_nav": "mindmap",
+            "project": project,
+            "nodes_svg": nodes_svg,
+            "edges_svg": edges_svg,
+            "auto_count": auto_count,
+            "manual_count": manual_count,
+            "edge_count": edge_count,
+            "sync_diff": diff,
+        },
+    )

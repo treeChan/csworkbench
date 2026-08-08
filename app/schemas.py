@@ -265,3 +265,142 @@ class WeeklyReviewRead(WeeklyReviewBase):
     updated_at: datetime
 
     model_config = ConfigDict(from_attributes=True)
+
+
+# ---------------------------------------------------------------------------
+# Mindmap（项目思维导图）
+# ---------------------------------------------------------------------------
+
+
+# 节点形状枚举（前端按钮 + SVG 渲染都用同一组）
+SHAPE_TYPES = {
+    "rect",
+    "rounded",
+    "ellipse",
+    "diamond",
+    "hexagon",
+    "arrow",
+    "text",
+    "sticky-yellow",
+    "sticky-pink",
+    "sticky-blue",
+}
+
+
+class MindmapNodeBase(BaseModel):
+    """节点基础字段。"""
+
+    shape_type: str = "rect"
+    label: str = ""
+    x: float = 0.0
+    y: float = 0.0
+    w: float = 120.0
+    h: float = 60.0
+    z_index: int = 0
+    font_size: int = 13
+    font_family: str = "system"
+
+
+class MindmapNodeCreate(MindmapNodeBase):
+    """创建 manual 节点。mindmap_id 走 URL，source_type/source_id/parent_id 不允许外部设。"""
+
+    model_config = ConfigDict(extra="forbid")
+
+
+class MindmapNodeUpdate(BaseModel):
+    """部分字段更新（拖拽/编辑文字/调整大小/置顶置底/调字号/换字体都用）。"""
+
+    shape_type: str | None = None
+    label: str | None = None
+    x: float | None = None
+    y: float | None = None
+    w: float | None = None
+    h: float | None = None
+    z_index: int | None = None
+    font_size: int | None = None
+    font_family: str | None = None
+
+
+class MindmapNodePosition(BaseModel):
+    """拖拽结束批量保存时用：单点 (id, x, y)。"""
+
+    id: int
+    x: float
+    y: float
+
+
+class MindmapBulkPositionUpdate(BaseModel):
+    """拖拽结束批量保存：一次提交多个节点位置。"""
+
+    positions: list[MindmapNodePosition]
+
+
+class MindmapNodeRead(MindmapNodeBase):
+    id: int
+    mindmap_id: int
+    kind: str
+    source_type: str | None = None
+    source_id: int | None = None
+    parent_id: int | None = None
+    font_size: int = 13
+    font_family: str = "system"
+    color: str | None = None
+    created_at: datetime
+    updated_at: datetime
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+# ---------------------------------------------------------------------------
+# 手动连线 (mindmap_edges)
+# ---------------------------------------------------------------------------
+
+FONT_FAMILIES = {
+    "system": '-apple-system, BlinkMacSystemFont, "PingFang SC", "Microsoft YaHei", sans-serif',
+    "hei":    '"PingFang SC", "Microsoft YaHei", "Heiti SC", sans-serif',
+    "song":   '"SimSun", "STSong", "Songti SC", serif',
+    "times":  '"Times New Roman", "Liberation Serif", serif',
+    "kai":    '"KaiTi", "STKaiti", "Kaiti SC", serif',
+    "mono":   'ui-monospace, "SF Mono", Menlo, Consolas, monospace',
+}
+
+
+class MindmapEdgeBase(BaseModel):
+    """连线基础字段。"""
+
+    source_id: int
+    target_id: int
+    arrow: bool = True
+
+
+class MindmapEdgeCreate(MindmapEdgeBase):
+    """创建连线。mindmap_id 走 URL，校验 source≠target 由 API 层负责。"""
+
+    model_config = ConfigDict(extra="forbid")
+
+
+class MindmapEdgeUpdate(BaseModel):
+    """部分字段更新（目前只能切箭头）。"""
+
+    arrow: bool | None = None
+
+
+class MindmapEdgeRead(MindmapEdgeBase):
+    id: int
+    mindmap_id: int
+    created_at: datetime
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class MindmapRead(BaseModel):
+    """一张导图 + 全部节点 + 全部手动连线。前端一次拿够。"""
+
+    id: int
+    project_id: int
+    nodes: list[MindmapNodeRead] = []
+    edges: list[MindmapEdgeRead] = []
+    # 上次自动同步的 diff（前端拿来弹 toast）
+    sync_diff: dict = {"added": 0, "removed": 0, "updated": 0}
+
+    model_config = ConfigDict(from_attributes=True)

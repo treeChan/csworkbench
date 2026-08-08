@@ -1,0 +1,156 @@
+{% extends "base.html" %}
+{% block title %}{{ project.name }} · 思维导图 · {{ app_name }}{% endblock %}
+
+{% block head %}
+<style>
+/* 画布占满中间区 + 隐藏 topbar/search 让画布有更多空间 */
+.topbar-center { display: none !important; }
+.layout { grid-template-columns: auto 1fr 0 !important; }
+.rightbar { display: none !important; }
+.sidebar { grid-column: 1; }
+.main-content { grid-column: 2; padding: 0 !important; }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="mm-page">
+
+    <!-- 顶部项目条 + 返回 + 保存状态 -->
+    <div class="mm-topbar">
+        <a href="/mindmap" class="mm-back" title="返回项目列表">←</a>
+        <div class="mm-title">
+            <h2>🧠 {{ project.name }}</h2>
+            <small>
+                自动 <strong>{{ auto_count }}</strong> · 手动 <strong>{{ manual_count }}</strong>
+            </small>
+        </div>
+        <button id="mm-sync-btn" class="btn btn-outline" title="手动同步（项目数据变化时自动同步）">🔄 同步</button>
+        <span id="mm-save-state" class="mm-save-state">● 已保存</span>
+    </div>
+
+    <!-- 工具栏 -->
+    <div class="mm-toolbar">
+        <div class="mm-toolbar-group">
+            <span class="mm-toolbar-label">形状</span>
+            <button class="mm-tb-btn" data-shape="rect" title="矩形">▭</button>
+            <button class="mm-tb-btn" data-shape="rounded" title="圆角矩形">▢</button>
+            <button class="mm-tb-btn" data-shape="ellipse" title="椭圆">⬭</button>
+            <button class="mm-tb-btn" data-shape="diamond" title="菱形">◇</button>
+            <button class="mm-tb-btn" data-shape="hexagon" title="六边形">⬡</button>
+            <button class="mm-tb-btn" data-shape="arrow" title="箭头">➤</button>
+            <button class="mm-tb-btn" data-shape="text" title="文本框">T</button>
+        </div>
+        <div class="mm-toolbar-sep"></div>
+        <div class="mm-toolbar-group">
+            <span class="mm-toolbar-label">便签</span>
+            <button class="mm-tb-btn mm-sticky-yellow" data-shape="sticky-yellow" title="黄色便签">▭</button>
+            <button class="mm-tb-btn mm-sticky-pink" data-shape="sticky-pink" title="粉色便签">▭</button>
+            <button class="mm-tb-btn mm-sticky-blue" data-shape="sticky-blue" title="蓝色便签">▭</button>
+        </div>
+        <div class="mm-toolbar-sep"></div>
+        <div class="mm-toolbar-group">
+            <span class="mm-toolbar-label">字号</span>
+            <button id="mm-font-dec" class="mm-tb-btn" title="缩小字号 (Ctrl -)">A-</button>
+            <button id="mm-font-reset" class="mm-tb-btn" title="恢复默认 13px (Ctrl 0)">A</button>
+            <button id="mm-font-inc" class="mm-tb-btn" title="放大字号 (Ctrl =)">A+</button>
+        </div>
+
+        <div class="mm-toolbar-sep"></div>
+        <div class="mm-toolbar-group">
+            <span class="mm-toolbar-label">字体</span>
+            <button class="mm-tb-btn mm-font mm-font-system" data-font="system" title="默认字体">Aa</button>
+            <button class="mm-tb-btn mm-font mm-font-hei" data-font="hei" title="黑体/PingFang">黑</button>
+            <button class="mm-tb-btn mm-font mm-font-song" data-font="song" title="宋体/SimSun">宋</button>
+            <button class="mm-tb-btn mm-font mm-font-times" data-font="times" title="Times New Roman">T</button>
+            <button class="mm-tb-btn mm-font mm-font-kai" data-font="kai" title="楷体">楷</button>
+            <button class="mm-tb-btn mm-font mm-font-mono" data-font="mono" title="等宽">M</button>
+        </div>
+
+        <div class="mm-toolbar-sep"></div>
+        <div class="mm-toolbar-group">
+            <span class="mm-toolbar-label">撤销</span>
+            <button id="mm-undo-btn" class="mm-tb-btn" title="撤销 (Ctrl+Z)" disabled>↶</button>
+            <button id="mm-redo-btn" class="mm-tb-btn" title="前进 (Ctrl+Shift+Z)" disabled>↷</button>
+        </div>
+
+        <div class="mm-toolbar-sep"></div>
+        <button id="mm-link-btn" class="mm-tb-btn" title="进入连线模式 (L)：再点两个节点完成连线">🔗 连线</button>
+
+        <div class="mm-toolbar-sep"></div>
+        <button id="mm-delete-btn" class="mm-tb-btn mm-danger" title="删除选中 (Del)">🗑 删除选中</button>
+        <button id="mm-clear-manual-btn" class="mm-tb-btn mm-danger" title="清空所有手动节点（自动树不受影响）">⚠ 清空手动</button>
+
+        <span class="mm-toolbar-hint">
+            双击编辑 · 拖动 · 选中节点拖蓝点连出 · 右键更多 ·
+            <kbd>Del</kbd>/<kbd>Ctrl+D</kbd>/<kbd>Ctrl±</kbd>/<kbd>Ctrl+Z</kbd>
+        </span>
+    </div>
+
+    <!-- SVG 画布 -->
+    <div class="mm-canvas-wrap">
+        <svg id="mm-svg" class="mm-canvas"
+             xmlns="http://www.w3.org/2000/svg"
+             data-project-id="{{ project.id }}">
+            <defs>
+                <pattern id="mm-grid" width="24" height="24" patternUnits="userSpaceOnUse">
+                    <path d="M 24 0 L 0 0 0 24" fill="none"
+                          stroke="var(--c-border, #e5e7eb)" stroke-width="0.5"/>
+                </pattern>
+                <!-- 连线箭头 marker（auto edges 不挂箭头；手动连线按 data-arrow 决定） -->
+                <marker id="mm-arrow" viewBox="0 0 10 10" refX="9" refY="5"
+                        markerWidth="8" markerHeight="8" orient="auto-start-reverse">
+                    <path d="M 0 0 L 10 5 L 0 10 z" fill="currentColor"/>
+                </marker>
+            </defs>
+            <rect class="mm-grid-bg" width="100%" height="100%" fill="url(#mm-grid)"/>
+            <g id="mm-edges-layer">
+                {{ edges_svg | safe }}
+            </g>
+            <g id="mm-nodes-layer">
+                {{ nodes_svg | safe }}
+            </g>
+            <!-- 临时拖拽连线（从锚点拖到光标） -->
+            <g id="mm-temp-edge-layer"></g>
+            <!-- 选中节点的 4 个锚点（连线时显示） -->
+            <g id="mm-anchors-layer"></g>
+        </svg>
+    </div>
+
+    <!-- 右键菜单：节点 -->
+    <ul id="mm-context-menu" class="mm-context-menu" hidden>
+        <li data-action="duplicate">📋 复制为副本 <kbd>Ctrl+D</kbd></li>
+        <li data-action="copy">📄 复制 <kbd>Ctrl+C</kbd></li>
+        <li data-action="paste">📥 粘贴 <kbd>Ctrl+V</kbd></li>
+        <li class="mm-sep"></li>
+        <li data-action="bring-front">⬆️ 置顶</li>
+        <li data-action="send-back">⬇️ 置底</li>
+        <li class="mm-sep"></li>
+        <li data-action="edit">✏️ 编辑文字</li>
+        <li data-action="delete" class="mm-danger-item">🗑 删除 <kbd>Del</kbd></li>
+    </ul>
+
+    <!-- 右键菜单：连线 -->
+    <ul id="mm-edge-context-menu" class="mm-context-menu" hidden>
+        <li data-edge-action="toggle-arrow">↔️ 切换箭头 <kbd>A</kbd></li>
+        <li class="mm-sep"></li>
+        <li data-edge-action="delete" class="mm-danger-item">🗑 删除连线 <kbd>Del</kbd></li>
+    </ul>
+
+    <!-- 自动同步提示 toast -->
+    <div id="mm-toast" class="mm-toast" hidden></div>
+</div>
+
+<!-- 同步状态注入到 JS 用 -->
+<script>
+window.MM_BOOT = {
+    projectId: {{ project.id }},
+    autoCount: {{ auto_count }},
+    manualCount: {{ manual_count }},
+    edgeCount: {{ edge_count }},
+    syncDiff: {{ sync_diff | tojson }}
+};
+</script>
+<script src="/static/mindmap.js" defer></script>
+{% endblock %}
+
+{% block scripts %}{% endblock %}

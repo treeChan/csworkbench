@@ -23,8 +23,11 @@ from app.config import get_db_url
 def _attach_default_pragmas(target_engine) -> None:
     """给 engine 的每个连接设默认 PRAGMA。
 
-    busy_timeout：SQLite 默认锁等待立即失败，并发写会报 database is locked。
-    迁移/备份期间其他请求可能短暂占锁，设 5s 等待窗口能避免偶发报错。
+    - busy_timeout：SQLite 默认锁等待立即失败，并发写会报 database is locked。
+      迁移/备份期间其他请求可能短暂占锁，设 5s 等待窗口能避免偶发报错。
+    - foreign_keys=ON：SQLite 默认不开启外键约束。不开的话 ON DELETE CASCADE 全是
+      摆设 —— 删源行时子表不会自动级联。这条 PRAGMA 是 per-connection 的，
+      必须每次新建连接时设一遍（SQLAlchemy 的连接池会反复创建新连接）。
     """
 
     @event.listens_for(target_engine, "connect")
@@ -32,6 +35,7 @@ def _attach_default_pragmas(target_engine) -> None:
         cur = dbapi_conn.cursor()
         try:
             cur.execute("PRAGMA busy_timeout=5000")
+            cur.execute("PRAGMA foreign_keys=ON")
         finally:
             cur.close()
 
@@ -171,6 +175,24 @@ def _migrate_2026_08_05() -> None:
                 text(
                     "ALTER TABLE metrics "
                     "ADD COLUMN note TEXT NOT NULL DEFAULT ''"
+                )
+            )
+
+        # --- mindmap_nodes.font_size ---
+        if not _column_exists(conn, "mindmap_nodes", "font_size"):
+            conn.execute(
+                text(
+                    "ALTER TABLE mindmap_nodes "
+                    "ADD COLUMN font_size INTEGER NOT NULL DEFAULT 13"
+                )
+            )
+
+        # --- mindmap_nodes.font_family ---
+        if not _column_exists(conn, "mindmap_nodes", "font_family"):
+            conn.execute(
+                text(
+                    "ALTER TABLE mindmap_nodes "
+                    "ADD COLUMN font_family VARCHAR(20) NOT NULL DEFAULT 'system'"
                 )
             )
 

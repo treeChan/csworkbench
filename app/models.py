@@ -12,7 +12,7 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from sqlalchemy import Date, DateTime, Float, ForeignKey, Integer, String, Text
+from sqlalchemy import Date, DateTime, Float, ForeignKey, Integer, String, Text, Boolean
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.database import Base
@@ -414,3 +414,180 @@ class WeeklyReview(Base):
 
     def __repr__(self) -> str:
         return f"<WeeklyReview id={self.id} week_start={self.week_start_date}>"
+
+
+# ---------------------------------------------------------------------------
+# 项目思维导图
+# ---------------------------------------------------------------------------
+
+
+class Mindmap(Base):
+    """一个项目对应一张导图（singleton，project_id 唯一）。
+
+    字段：
+        id: 主键
+        project_id: 所属项目（UNIQUE，保证一对一）
+        created_at / updated_at: UTC 时间
+    """
+
+    __tablename__ = "mindmaps"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+
+    project_id: Mapped[int] = mapped_column(
+        ForeignKey("projects.id", ondelete="CASCADE"),
+        unique=True,
+        index=True,
+    )
+
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime, default=datetime.utcnow, onupdate=datetime.utcnow
+    )
+
+    # 反向关系：画布上的所有节点
+    nodes: Mapped[list["MindmapNode"]] = relationship(
+        "MindmapNode",
+        back_populates="mindmap",
+        cascade="all, delete-orphan",
+        order_by="MindmapNode.id.asc()",
+    )
+    edges: Mapped[list["MindmapEdge"]] = relationship(
+        "MindmapEdge",
+        back_populates="mindmap",
+        cascade="all, delete-orphan",
+        order_by="MindmapEdge.id.asc()",
+    )
+
+    def __repr__(self) -> str:
+        return f"<Mindmap id={self.id} project_id={self.project_id}>"
+
+
+class MindmapNode(Base):
+    """画布上的一个节点（形状/文本框/便签等）。
+
+    自动节点（kind='auto'）由 sync_auto_tree 根据 Project/Goal/Experiment
+    生成与维护；手动节点（kind='manual'）由用户在画布上自由增删改。
+    source_type / source_id 仅 auto 节点使用，用于同步时识别数据源。
+
+    字段：
+        id: 主键
+        mindmap_id: 所属导图
+        kind: 'auto' 或 'manual'
+        source_type: 'project' / 'goal' / 'experiment' / None
+        source_id: 源实体 PK（仅 auto 节点）
+        parent_id: 自引用 FK，自动树用它构造父子关系
+        shape_type: 'rect' / 'rounded' / 'ellipse' / 'diamond' / 'hexagon' /
+                    'arrow' / 'text' / 'sticky-yellow' / 'sticky-pink' / 'sticky-blue'
+        label: 显示文字
+        x, y: 画布坐标（左上角）
+        w, h: 宽高（arrow 形状固定）
+        z_index: 层级
+        color: 预留颜色（目前用 shape_type 区分便签色）
+        created_at / updated_at: UTC 时间
+    """
+
+    __tablename__ = "mindmap_nodes"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+
+    mindmap_id: Mapped[int] = mapped_column(
+        ForeignKey("mindmaps.id", ondelete="CASCADE"), index=True
+    )
+
+    kind: Mapped[str] = mapped_column(String(10), default="manual")  # auto/manual
+
+    source_type: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    source_id: Mapped[int | None] = mapped_column(Integer, nullable=True)
+
+    parent_id: Mapped[int | None] = mapped_column(
+        ForeignKey("mindmap_nodes.id", ondelete="CASCADE"), nullable=True
+    )
+
+    shape_type: Mapped[str] = mapped_column(String(30), default="rect")
+    label: Mapped[str] = mapped_column(Text, default="")
+
+    x: Mapped[float] = mapped_column(Float, default=0.0)
+    y: Mapped[float] = mapped_column(Float, default=0.0)
+    w: Mapped[float] = mapped_column(Float, default=120.0)
+    h: Mapped[float] = mapped_column(Float, default=60.0)
+    z_index: Mapped[int] = mapped_column(Integer, default=0)
+
+    font_size: Mapped[int] = mapped_column(Integer, default=13)
+    font_family: Mapped[str] = mapped_column(String(20), default="system")
+
+    color: Mapped[str | None] = mapped_column(String(20), nullable=True)
+
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime, default=datetime.utcnow, onupdate=datetime.utcnow
+    )
+
+    mindmap: Mapped[Mindmap] = relationship("Mindmap", back_populates="nodes")
+    parent: Mapped["MindmapNode | None"] = relationship(
+        "MindmapNode",
+        back_populates="children",
+        remote_side="MindmapNode.id",
+        foreign_keys=[parent_id],
+    )
+    children: Mapped[list["MindmapNode"]] = relationship(
+        "MindmapNode",
+        back_populates="parent",
+        cascade="all, delete-orphan",
+        foreign_keys=[parent_id],
+    )
+
+    def __repr__(self) -> str:
+        return (
+            f"<MindmapNode id={self.id} kind={self.kind!r} "
+            f"shape={self.shape_type!r} label={self.label[:20]!r}>"
+        )
+
+
+class MindmapEdge(Base):
+    """手动连线（节点之间的有向边）。
+
+    区别于自动树通过 parent_id 渲染的连线（parent-child 关系），
+    本表是用户在画布上手动拖出的连线，可自由指定 source/target 和箭头。
+
+    字段：
+        id: 主键
+        mindmap_id: 所属导图
+        source_id: 拖出端节点
+        target_id: 箭头指向端节点
+        arrow: 端点是否画箭头（用户可切）
+        created_at: UTC 时间
+    """
+
+    __tablename__ = "mindmap_edges"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+
+    mindmap_id: Mapped[int] = mapped_column(
+        ForeignKey("mindmaps.id", ondelete="CASCADE"), index=True
+    )
+    source_id: Mapped[int] = mapped_column(
+        ForeignKey("mindmap_nodes.id", ondelete="CASCADE"), index=True
+    )
+    target_id: Mapped[int] = mapped_column(
+        ForeignKey("mindmap_nodes.id", ondelete="CASCADE"), index=True
+    )
+
+    arrow: Mapped[bool] = mapped_column(Boolean, default=True)
+
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+
+    # 反向引用（不是必须的，但方便日后做图查询）
+    mindmap: Mapped[Mindmap] = relationship("Mindmap", back_populates="edges")
+    source: Mapped[MindmapNode] = relationship(
+        "MindmapNode", foreign_keys=[source_id]
+    )
+    target: Mapped[MindmapNode] = relationship(
+        "MindmapNode", foreign_keys=[target_id]
+    )
+
+    def __repr__(self) -> str:
+        return (
+            f"<MindmapEdge id={self.id} {self.source_id}→{self.target_id} "
+            f"arrow={self.arrow}>"
+        )

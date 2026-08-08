@@ -1083,3 +1083,381 @@ button.pipeline-step:focus { outline: 2px solid var(--c-primary-light); outline-
     background: var(--c-danger);
     opacity: 0.88;
 }
+
+
+/* ===========================================================
+ * 思维导图画布
+ * =========================================================== */
+
+.mm-page {
+    display: flex;
+    flex-direction: column;
+    height: calc(100vh - 40px); /* 减去底栏 40px */
+    overflow: hidden;
+}
+
+.mm-topbar {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 10px 16px;
+    background: var(--c-surface);
+    border-bottom: 1px solid var(--c-border);
+    flex-shrink: 0;
+}
+
+.mm-back {
+    width: 32px;
+    height: 32px;
+    border-radius: var(--radius-md, 6px);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: var(--c-bg);
+    border: 1px solid var(--c-border);
+    color: var(--c-text);
+    text-decoration: none;
+    font-size: 16px;
+    transition: background 0.15s;
+}
+.mm-back:hover { background: var(--c-primary-bg, #f3e8ff); }
+
+.mm-title { flex: 1; min-width: 0; }
+.mm-title h2 {
+    margin: 0;
+    font-size: 16px;
+    font-weight: 600;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+.mm-title small {
+    color: var(--c-text-soft);
+    font-size: 11px;
+}
+
+.mm-save-state {
+    font-size: 11.5px;
+    padding: 3px 10px;
+    border-radius: 999px;
+    background: var(--c-bg);
+    border: 1px solid var(--c-border);
+    color: var(--c-text-soft);
+    white-space: nowrap;
+}
+.mm-save-state.state-saving { color: var(--c-text-soft); border-color: var(--c-border); }
+.mm-save-state.state-error { color: var(--c-danger); border-color: var(--c-danger); }
+.mm-save-state.state-saved { color: var(--c-text-soft); }
+
+.mm-toolbar {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 8px 12px;
+    background: var(--c-surface);
+    border-bottom: 1px solid var(--c-border);
+    flex-wrap: wrap;
+    flex-shrink: 0;
+}
+
+.mm-toolbar-group {
+    display: flex;
+    align-items: center;
+    gap: 3px;
+    padding: 0 4px;
+}
+
+.mm-toolbar-label {
+    font-size: 11px;
+    color: var(--c-text-soft);
+    margin-right: 4px;
+    font-weight: 500;
+}
+
+.mm-toolbar-sep {
+    width: 1px;
+    height: 22px;
+    background: var(--c-border);
+    margin: 0 6px;
+}
+
+.mm-tb-btn {
+    width: 32px;
+    height: 30px;
+    border: 1px solid var(--c-border);
+    background: var(--c-bg);
+    border-radius: 5px;
+    cursor: pointer;
+    font-size: 14px;
+    color: var(--c-text);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.12s;
+}
+.mm-tb-btn:hover {
+    background: var(--c-primary-bg, #f3e8ff);
+    border-color: var(--c-primary-light, #c4b5fd);
+}
+.mm-tb-btn.mm-sticky-yellow { background: #fef9c3; }
+.mm-tb-btn.mm-sticky-pink   { background: #fce7f3; }
+.mm-tb-btn.mm-sticky-blue   { background: #dbeafe; }
+.mm-tb-btn.mm-danger { color: var(--c-danger); border-color: var(--c-danger); width: auto; padding: 0 10px; font-size: 12px; }
+
+.mm-toolbar-hint {
+    margin-left: auto;
+    font-size: 11px;
+    color: var(--c-text-faint, #94a3b8);
+    white-space: nowrap;
+}
+
+.mm-canvas-wrap {
+    flex: 1;
+    overflow: auto;
+    background: var(--c-bg);
+    position: relative;
+    /* 让画布看起来像无限区域 —— 用一个超大 svg */
+}
+
+.mm-canvas {
+    display: block;
+    width: 4000px;
+    height: 3000px;
+    background: var(--c-bg);
+    user-select: none;
+}
+
+.mm-grid-bg { fill: url(#mm-grid); }
+
+/* ---- 节点 ---- */
+.mm-node {
+    cursor: move;
+    transition: filter 0.12s;
+}
+.mm-node:hover { filter: brightness(1.05); }
+.mm-node.selected .mm-shape {
+    stroke: var(--c-primary, #7C3AED);
+    stroke-width: 2.5px;
+}
+.mm-node.selected .mm-label {
+    color: var(--c-primary, #7C3AED);
+}
+
+.mm-shape {
+    stroke: var(--c-border, #d1d5db);
+    stroke-width: 1.5px;
+    fill: var(--c-surface, #fff);
+}
+
+/* 不同 shape_type 配色 */
+.mm-node.kind-auto .mm-shape {
+    fill: var(--c-primary-bg, #f3e8ff);
+    stroke: var(--c-primary, #7C3AED);
+}
+.mm-node.kind-auto.project .mm-shape {
+    fill: var(--c-primary, #7C3AED);
+    stroke: var(--c-primary, #7C3AED);
+}
+.mm-node.kind-auto.project .mm-label {
+    color: #fff;
+    font-weight: 600;
+}
+
+.mm-node.shape-sticky-yellow .mm-shape { fill: #fef9c3; stroke: #facc15; }
+.mm-node.shape-sticky-pink .mm-shape   { fill: #fce7f3; stroke: #f472b6; }
+.mm-node.shape-sticky-blue .mm-shape   { fill: #dbeafe; stroke: #60a5fa; }
+.mm-node.shape-text .mm-shape         { display: none; }
+
+.mm-label {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 100%;
+    height: 100%;
+    text-align: center;
+    font-size: 13px;
+    line-height: 1.3;
+    color: var(--c-text);
+    padding: 4px 8px;
+    box-sizing: border-box;
+    word-break: break-word;
+    overflow: hidden;
+    pointer-events: none; /* 防止文字抢拖拽事件 */
+}
+.mm-label.editing {
+    pointer-events: auto;
+    cursor: text;
+    background: var(--c-surface);
+    border: 2px solid var(--c-primary);
+    border-radius: 4px;
+    box-shadow: 0 0 0 3px var(--c-primary-bg);
+}
+.mm-label:empty::before {
+    content: "双击编辑…";
+    color: var(--c-text-faint);
+    font-style: italic;
+}
+
+/* ---- 连线 ---- */
+.mm-edge {
+    fill: none;
+    stroke: var(--c-border, #d1d5db);
+    stroke-width: 1.5px;
+    stroke-dasharray: 0;
+}
+
+/* ---- 右键菜单 ---- */
+.mm-context-menu {
+    position: fixed;
+    z-index: 1000;
+    min-width: 180px;
+    background: var(--c-surface);
+    border: 1px solid var(--c-border);
+    border-radius: var(--radius-md, 6px);
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.12);
+    padding: 4px 0;
+    margin: 0;
+    list-style: none;
+    font-size: 13px;
+}
+.mm-context-menu li {
+    padding: 6px 14px;
+    cursor: pointer;
+    color: var(--c-text);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+}
+.mm-context-menu li:hover {
+    background: var(--c-primary-bg, #f3e8ff);
+}
+.mm-context-menu li.mm-sep {
+    padding: 0;
+    margin: 4px 0;
+    height: 1px;
+    background: var(--c-border);
+    cursor: default;
+}
+.mm-context-menu li.mm-sep:hover { background: var(--c-border); }
+.mm-context-menu li.mm-danger-item { color: var(--c-danger); }
+.mm-context-menu li.mm-danger-item:hover { background: #fef2f2; }
+.mm-context-menu kbd {
+    font-size: 10px;
+    font-family: ui-monospace, monospace;
+    color: var(--c-text-faint, #94a3b8);
+    background: var(--c-bg);
+    padding: 1px 5px;
+    border-radius: 3px;
+    border: 1px solid var(--c-border);
+}
+
+/* ---- toast ---- */
+.mm-toast {
+    position: fixed;
+    top: 16px;
+    left: 50%;
+    transform: translateX(-50%);
+    background: var(--c-text, #1f2937);
+    color: #fff;
+    padding: 8px 18px;
+    border-radius: 999px;
+    font-size: 13px;
+    z-index: 999;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.18);
+    animation: mm-toast-in 0.2s ease;
+}
+.mm-toast-error { background: var(--c-danger, #ef4444); }
+
+@keyframes mm-toast-in {
+    from { opacity: 0; transform: translate(-50%, -8px); }
+    to   { opacity: 1; transform: translate(-50%, 0); }
+}
+
+/* ---- 隐藏顶栏搜索框（画布页面） ---- */
+.topbar-center { transition: opacity 0.15s; }
+
+/* ---- 连线：手动 vs 自动 ---- */
+.mm-edge {
+    fill: none;
+    stroke: var(--c-border, #d1d5db);
+    stroke-width: 1.5px;
+    stroke-dasharray: 0;
+    cursor: default;
+    transition: stroke 0.12s, stroke-width 0.12s;
+}
+/* 自动树连线：浅灰、虚一点（不抢戏） */
+.mm-edge.mm-edge-auto {
+    stroke: var(--c-border, #d1d5db);
+    opacity: 0.7;
+}
+/* 手动连线：紫色，明显 */
+.mm-edge.mm-edge-manual {
+    stroke: var(--c-primary, #7C3AED);
+    stroke-width: 2px;
+    cursor: pointer;
+}
+.mm-edge.mm-edge-manual:hover {
+    stroke: var(--c-primary-dark, #5B21B6);
+    stroke-width: 2.5px;
+}
+.mm-edge.mm-edge-manual.selected {
+    stroke: var(--c-primary-dark, #5B21B6);
+    stroke-width: 3px;
+}
+
+/* ---- 锚点（选中节点的 4 个蓝点） ---- */
+.mm-anchor {
+    fill: var(--c-primary, #7C3AED);
+    stroke: var(--c-surface, #fff);
+    stroke-width: 1.5px;
+    cursor: crosshair;
+    transition: r 0.12s, fill 0.12s;
+}
+.mm-anchor:hover {
+    fill: var(--c-primary-dark, #5B21B6);
+}
+.mm-anchor[data-side="t"] { cursor: n-resize; }
+.mm-anchor[data-side="b"] { cursor: s-resize; }
+.mm-anchor[data-side="l"] { cursor: w-resize; }
+.mm-anchor[data-side="r"] { cursor: e-resize; }
+
+/* ---- 连线模式（toolbar 按钮按下后） ---- */
+.mm-link-mode svg.mm-canvas,
+.mm-link-mode .mm-canvas-wrap {
+    cursor: crosshair !important;
+}
+.mm-link-mode .mm-node {
+    cursor: crosshair !important;
+}
+
+/* ---- 字体按钮（每个按钮带自己字体的预览） ---- */
+.mm-font.mm-font-system { font-family: -apple-system, BlinkMacSystemFont, "PingFang SC", sans-serif; }
+.mm-font.mm-font-hei    { font-family: "PingFang SC", "Microsoft YaHei", sans-serif; font-weight: 600; }
+.mm-font.mm-font-song   { font-family: "SimSun", "Songti SC", serif; }
+.mm-font.mm-font-times  { font-family: "Times New Roman", serif; font-style: italic; }
+.mm-font.mm-font-kai    { font-family: "KaiTi", "STKaiti", serif; }
+.mm-font.mm-font-mono   { font-family: ui-monospace, "SF Mono", Menlo, monospace; font-size: 12px; }
+
+/* 自动树形状区分：goal=椭圆 / experiment=菱形 */
+.mm-node.kind-auto.shape-ellipse .mm-shape {
+    fill: var(--c-primary-bg, #f3e8ff);
+    stroke: var(--c-primary, #7C3AED);
+    stroke-width: 2px;
+}
+.mm-node.kind-auto.shape-diamond .mm-shape {
+    fill: var(--c-surface, #fff);
+    stroke: var(--c-primary-light, #A78BFA);
+    stroke-width: 2px;
+}
+
+/* 撤销/前进按钮 disabled 视觉 */
+.mm-tb-btn:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+    background: var(--c-bg-soft, #f6f7f9);
+}
+.mm-tb-btn:disabled:hover {
+    background: var(--c-bg-soft, #f6f7f9);
+    border-color: var(--c-border);
+}

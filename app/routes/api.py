@@ -851,3 +851,151 @@ def api_backup_db(background: BackgroundTasks):
         filename=fname,
         media_type="application/zip",
     )
+
+
+# ---------------------------------------------------------------------------
+# 项目思维导图
+# ---------------------------------------------------------------------------
+
+
+def _node_to_read(n) -> schemas.MindmapNodeRead:
+    return schemas.MindmapNodeRead.model_validate(n)
+
+
+def _edge_to_read(e) -> schemas.MindmapEdgeRead:
+    return schemas.MindmapEdgeRead.model_validate(e)
+
+
+@router.get("/projects/{project_id}/mindmap", response_model=schemas.MindmapRead)
+def api_get_mindmap(project_id: int, db: Session = Depends(get_db)):
+    """取该项目导图全部节点 + 手动连线。GET 即触发增量 sync。"""
+    if crud.get_project(db, project_id) is None:
+        raise HTTPException(404, "Project not found")
+    mm = crud.get_or_create_mindmap(db, project_id)
+    diff = crud.sync_auto_tree(db, project_id)
+    nodes = crud.list_nodes(db, mm.id)
+    edges = crud.list_edges(db, mm.id)
+    return schemas.MindmapRead(
+        id=mm.id,
+        project_id=mm.project_id,
+        nodes=[_node_to_read(n) for n in nodes],
+        edges=[_edge_to_read(e) for e in edges],
+        sync_diff=diff,
+    )
+
+
+@router.post("/projects/{project_id}/mindmap/sync")
+def api_sync_mindmap(project_id: int, db: Session = Depends(get_db)):
+    """手动触发 sync。返回 diff {added, removed, updated}。"""
+    if crud.get_project(db, project_id) is None:
+        raise HTTPException(404, "Project not found")
+    diff = crud.sync_auto_tree(db, project_id)
+    return diff
+
+
+@router.post(
+    "/projects/{project_id}/mindmap/nodes",
+    response_model=schemas.MindmapNodeRead,
+    status_code=201,
+)
+def api_create_mindmap_node(
+    project_id: int,
+    data: schemas.MindmapNodeCreate,
+    db: Session = Depends(get_db),
+):
+    """新建一个 manual 节点（工具栏按钮 / 复制粘贴走这里）。"""
+    if crud.get_project(db, project_id) is None:
+        raise HTTPException(404, "Project not found")
+    mm = crud.get_or_create_mindmap(db, project_id)
+    if data.shape_type not in schemas.SHAPE_TYPES:
+        raise HTTPException(400, f"不支持的 shape_type: {data.shape_type}")
+    node = crud.create_node(db, mm.id, data)
+    return _node_to_read(node)
+
+
+@router.patch(
+    "/mindmap/nodes/{node_id}",
+    response_model=schemas.MindmapNodeRead,
+)
+def api_update_mindmap_node(
+    node_id: int,
+    data: schemas.MindmapNodeUpdate,
+    db: Session = Depends(get_db),
+):
+    """更新单个节点（编辑文字/调大小/改 shape_type/置顶置底都用）。"""
+    node = crud.get_node(db, node_id)
+    if node is None:
+        raise HTTPException(404, "MindmapNode not found")
+    if data.shape_type is not None and data.shape_type not in schemas.SHAPE_TYPES:
+        raise HTTPException(400, f"不支持的 shape_type: {data.shape_type}")
+    crud.update_node(db, node, data)
+    return _node_to_read(node)
+
+
+@router.delete("/mindmap/nodes/{node_id}", status_code=204)
+def api_delete_mindmap_node(node_id: int, db: Session = Depends(get_db)):
+    node = crud.get_node(db, node_id)
+    if node is None:
+        raise HTTPException(404, "MindmapNode not found")
+    crud.delete_node(db, node)
+
+
+@router.post("/mindmap/nodes/bulk-position")
+def api_bulk_update_positions(
+    data: schemas.MindmapBulkPositionUpdate,
+    db: Session = Depends(get_db),
+):
+    """拖拽结束批量保存位置。一次请求多节点，少 IO。"""
+    updated = crud.bulk_update_positions(db, data.positions)
+    return {"updated": updated}
+
+
+# ---------------------------------------------------------------------------
+# 手动连线 (mindmap_edges) endpoints
+# ---------------------------------------------------------------------------
+
+
+@router.post(
+    "/projects/{project_id}/mindmap/edges",
+    response_model=schemas.MindmapEdgeRead,
+    status_code=201,
+)
+def api_create_mindmap_edge(
+    project_id: int,
+    data: schemas.MindmapEdgeCreate,
+    db: Session = Depends(get_db),
+):
+    """创建一条手动连线（source→target）。"""
+    if crud.get_project(db, project_id) is None:
+        raise HTTPException(404, "Project not found")
+    mm = crud.get_or_create_mindmap(db, project_id)
+    try:
+        edge = crud.create_edge(db, mm.id, data)
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+    return _edge_to_read(edge)
+
+
+@router.patch(
+    "/mindmap/edges/{edge_id}",
+    response_model=schemas.MindmapEdgeRead,
+)
+def api_update_mindmap_edge(
+    edge_id: int,
+    data: schemas.MindmapEdgeUpdate,
+    db: Session = Depends(get_db),
+):
+    """更新连线（目前仅支持切箭头）。"""
+    edge = crud.get_edge(db, edge_id)
+    if edge is None:
+        raise HTTPException(404, "MindmapEdge not found")
+    crud.update_edge(db, edge, data)
+    return _edge_to_read(edge)
+
+
+@router.delete("/mindmap/edges/{edge_id}", status_code=204)
+def api_delete_mindmap_edge(edge_id: int, db: Session = Depends(get_db)):
+    edge = crud.get_edge(db, edge_id)
+    if edge is None:
+        raise HTTPException(404, "MindmapEdge not found")
+    crud.delete_edge(db, edge)
