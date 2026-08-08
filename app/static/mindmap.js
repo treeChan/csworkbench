@@ -29,8 +29,12 @@
     const linkBtn = document.getElementById("mm-link-btn");
 
     // 状态
-    let selectedNode = null;
+    let selectedNode = null;          // 主选中 (兼容旧代码)
+    let selectedNodes = new Set();    // 多选集合 (含主选中)
     let selectedEdge = null;
+    // 框选
+    let marquee = null;               // { rectEl, startX, startY, moved }
+    let marqueeRect = null;           // SVG <rect> 元素
     let clipboard = null; // 复制的节点数据（不含 id）
     let dragState = null;
     let linkMode = null; // { sourceId, sourceNodeEl } | null
@@ -109,12 +113,51 @@
     }
 
     // ---- 选中 ----
-    function selectNode(el) {
-        if (selectedNode === el) return;
-        if (selectedNode) selectedNode.classList.remove("selected");
-        selectedNode = el || null;
-        if (selectedNode) selectedNode.classList.add("selected");
-        // 切换节点选中时，边的选中取消 + 重新画锚点
+    // opts.additive = true 时为多选模式 (Shift+点击 / 框选释放)
+    function selectNode(el, opts) {
+        opts = opts || {};
+        if (!el) {
+            // 清空所有选中
+            selectedNodes.forEach(function (n) { n.classList.remove("selected"); });
+            selectedNodes.clear();
+            selectedNode = null;
+            clearEdgeSelection();
+            renderAnchors();
+            return;
+        }
+        if (opts.additive) {
+            // 切换式多选
+            if (selectedNodes.has(el)) {
+                selectedNodes.delete(el);
+                el.classList.remove("selected");
+                // 主选中挪到剩余的最后一个；如果空了，置 null
+                if (selectedNodes.size > 0) {
+                    selectedNode = Array.from(selectedNodes).pop();
+                } else {
+                    selectedNode = null;
+                }
+            } else {
+                selectedNodes.add(el);
+                el.classList.add("selected");
+                selectedNode = el;
+            }
+            // 边选中清掉
+            if (selectedEdge) selectedEdge.classList.remove("selected");
+            selectedEdge = null;
+            renderAnchors();
+            return;
+        }
+        // 普通单选：清空其他
+        if (selectedNodes.has(el) && selectedNodes.size === 1) {
+            // 已经是唯一选中 → 不动
+            return;
+        }
+        selectedNodes.forEach(function (n) { n.classList.remove("selected"); });
+        selectedNodes.clear();
+        selectedNodes.add(el);
+        el.classList.add("selected");
+        selectedNode = el;
+        // 切换节点选中时, 边的选中取消 + 重新画锚点
         clearEdgeSelection();
         renderAnchors();
     }
@@ -125,19 +168,61 @@
 
     // ---- 选中边 ----
     function selectEdge(el) {
-        if (selectedEdge === el) return;
+        if (selectedEdge === el && !el) return;
         if (selectedEdge) selectedEdge.classList.remove("selected");
         selectedEdge = el || null;
         if (selectedEdge) selectedEdge.classList.add("selected");
-        // 边被选中时，节点的选中取消（且隐藏锚点）
+        // 边被选中时, 节点的选中清空 + 隐藏锚点
         if (selectedEdge) {
-            if (selectedNode) selectedNode.classList.remove("selected");
+            selectedNodes.forEach(function (n) { n.classList.remove("selected"); });
+            selectedNodes.clear();
             selectedNode = null;
             renderAnchors();
         }
     }
     function clearEdgeSelection() {
-        selectEdge(null);
+        if (!selectedEdge) return;
+        selectedEdge.classList.remove("selected");
+        selectedEdge = null;
+    }
+
+    // 辅助: 遍历所有选中的 manual 节点 (批量操作时跳过 auto)
+    function forEachSelectedManual(cb) {
+        selectedNodes.forEach(function (el) {
+            if (el.getAttribute("data-kind") === "manual") cb(el);
+        });
+    }
+    function getSelectedIds() {
+        const ids = [];
+        selectedNodes.forEach(function (el) {
+            ids.push(parseInt(el.getAttribute("data-id"), 10));
+        });
+        return ids;
+    }
+
+    // 批量删除选中的 manual 节点 (跳过 auto)
+    async function deleteSelectedNodes() {
+        const ids = [];
+        selectedNodes.forEach(function (el) {
+            if (el.getAttribute("data-kind") === "manual") {
+                ids.push(parseInt(el.getAttribute("data-id"), 10));
+            }
+        });
+        const autoCount = selectedNodes.size - ids.length;
+        if (autoCount > 0) showToast("已跳过 " + autoCount + " 个自动节点", "warn");
+        if (ids.length === 0) return;
+        // 先清空选中 (deleteNode 内会移除 DOM 和 nodeById)
+        selectedNodes.forEach(function (el) { el.classList.remove("selected"); });
+        selectedNodes.clear();
+        selectedNode = null;
+        for (const id of ids) {
+            await deleteNode(id, true);  // skipUndo: 单个删除不进栈, 整体进一个栈
+        }
+        // 整体作为一个撤销单元
+        if (ids.length > 1) {
+            pushCommand({ type: "bulk-delete-nodes", ids: ids.slice(), label: "删除 " + ids.length + " 个节点" });
+        }
+        renderAnchors();
     }
 
     // ---- 节点工具：根据 id 取 SVG 元素 ----
@@ -477,13 +562,15 @@
     function renderAnchors() {
         if (!anchorsLayer) return;
         anchorsLayer.textContent = "";
+        // 锚点只在「连线模式」显示 (避免多选时一堆锚点散落)
+        if (!linkMode) return;
         if (!selectedNode) return;
         const t = selectedNode.getAttribute("transform") || "";
         const m = t.match(/translate\(([-\d.]+),([-\d.]+)\)/);
         const x = m ? parseFloat(m[1]) : 0;
         const y = m ? parseFloat(m[2]) : 0;
-        const w = parseFloat(selectedNode.querySelector(".mm-shape")?.getAttribute("width") || 120);
-        const h = parseFloat(selectedNode.querySelector(".mm-shape")?.getAttribute("height") || 60);
+        const w = parseFloat(selectedNode.getAttribute("data-w") || "120");
+        const h = parseFloat(selectedNode.getAttribute("data-h") || "60");
         const pts = [
             { side: "t", cx: x + w / 2, cy: y },
             { side: "r", cx: x + w,     cy: y + h / 2 },
@@ -807,26 +894,32 @@
     // 字体切换
     // ===================================================================
     async function changeFontFamily(family) {
-        if (!selectedNode) {
+        if (selectedNodes.size === 0) {
             showToast("请先选中一个节点", "error");
             return;
         }
         if (!FONT_STACKS[family]) return;
-        const id = parseInt(selectedNode.getAttribute("data-id"), 10);
-        // 抓 before
-        const before = { font_family: selectedNode.getAttribute("data-font-family") || "system" };
-        const after = { font_family: family };
-        if (before.font_family === after.font_family) return;
-        // 乐观更新
-        const lbl = selectedNode.querySelector(".mm-label");
-        if (lbl) lbl.setAttribute("style", "font-size:" + (lbl.style.fontSize || "13px") + ";font-family:" + FONT_STACKS[family]);
-        selectedNode.setAttribute("data-font-family", family);
+        // 多选: 每个节点独立 patch
+        const targets = [];
+        selectedNodes.forEach(function (el) {
+            targets.push({
+                el: el,
+                id: parseInt(el.getAttribute("data-id"), 10),
+                before: el.getAttribute("data-font-family") || "system",
+            });
+        });
         setSaveState("saving");
         try {
-            const n = await api("/api/mindmap/nodes/" + id, {
-                method: "PATCH", body: { font_family: family },
-            });
-            pushCommand({ type: "patch-node", id: id, before: before, after: after });
+            for (const t of targets) {
+                if (t.before === family) continue;
+                t.el.setAttribute("data-font-family", family);
+                const lbl = t.el.querySelector(".mm-label");
+                if (lbl) lbl.setAttribute("style", "font-size:" + (lbl.style.fontSize || "13px") + ";font-family:" + FONT_STACKS[family]);
+                await api("/api/mindmap/nodes/" + t.id, {
+                    method: "PATCH", body: { font_family: family },
+                });
+                pushCommand({ type: "patch-node", id: t.id, before: { font_family: t.before }, after: { font_family: family } });
+            }
             setSaveState("saved");
         } catch (e) {
             console.error(e);
@@ -885,21 +978,38 @@
             }
 
             e.stopPropagation();
-            selectNode(el);
 
-            // 当前 translate
-            const t = el.getAttribute("transform") || "";
-            const m = t.match(/translate\(([-\d.]+),([-\d.]+)\)/);
-            const ox = m ? parseFloat(m[1]) : 0;
-            const oy = m ? parseFloat(m[2]) : 0;
+            // Shift+点击 → 多选切换
+            if (e.shiftKey) {
+                selectNode(el, { additive: true });
+            } else if (!selectedNodes.has(el) && selectedNodes.size > 0) {
+                // 已有多选, 点击未选中的节点 → 加入多选并继续拖
+                selectNode(el, { additive: true });
+            } else {
+                // 普通点击: 单选 (清空其他)
+                selectNode(el);
+            }
+
+            // 记录每个选中节点的 origX/origY, 一起拖
+            const dragItems = [];
+            selectedNodes.forEach(function (n) {
+                const t = n.getAttribute("transform") || "";
+                const m = t.match(/translate\(([-\d.]+),([-\d.]+)\)/);
+                const ox = m ? parseFloat(m[1]) : 0;
+                const oy = m ? parseFloat(m[2]) : 0;
+                dragItems.push({
+                    el: n,
+                    id: parseInt(n.getAttribute("data-id"), 10),
+                    origX: ox,
+                    origY: oy,
+                    kind: n.getAttribute("data-kind"),
+                });
+            });
 
             dragState = {
-                el: el,
-                id: parseInt(el.getAttribute("data-id"), 10),
+                items: dragItems,
                 startX: e.clientX,
                 startY: e.clientY,
-                origX: ox,
-                origY: oy,
                 moved: false,
             };
 
@@ -908,15 +1018,16 @@
                 const dx = ev.clientX - dragState.startX;
                 const dy = ev.clientY - dragState.startY;
                 if (Math.abs(dx) + Math.abs(dy) > 2) dragState.moved = true;
-                const nx = Math.max(0, dragState.origX + dx);
-                const ny = Math.max(0, dragState.origY + dy);
-                dragState.el.setAttribute("transform", "translate(" + nx + "," + ny + ")");
+                dragState.items.forEach(function (it) {
+                    if (it.kind === "auto") return;  // auto 节点位置由 parent 决定, 不让拖
+                    const nx = Math.max(0, it.origX + dx);
+                    const ny = Math.max(0, it.origY + dy);
+                    it.el.setAttribute("transform", "translate(" + nx + "," + ny + ")");
+                    pendingPositions[it.id] = { x: nx, y: ny };
+                });
                 // 同步移动相关连线 + 重画锚点
                 redrawEdges();
                 renderAnchors();
-                // 累积待保存
-                const id = dragState.el.getAttribute("data-id");
-                pendingPositions[id] = { x: nx, y: ny };
                 if (saveTimer) clearTimeout(saveTimer);
                 saveTimer = setTimeout(flushPositions, 600);
             }
@@ -1195,24 +1306,109 @@
         }
     })();
 
-    // ---- 画布空白点击：取消选中 ----
+    // ---- 画布空白按下：进入框选模式 (空白拖拽出矩形框选节点; 仅点击 = 取消选中) ----
     svg.addEventListener("mousedown", function (e) {
-        if (e.target === svg || e.target.classList.contains("mm-grid-bg")) {
-            clearSelection();
+        if (e.button !== 0) return;
+        // 仅在 SVG 自身或网格背景按下时才算空白 (节点/边/锚点的 mousedown 会 stopPropagation)
+        if (!(e.target === svg || e.target.classList.contains("mm-grid-bg"))) return;
+
+        const ctm = svg.getScreenCTM();
+        if (!ctm) return;
+        const pt = svg.createSVGPoint();
+        pt.x = e.clientX;
+        pt.y = e.clientY;
+        const local = pt.matrixTransform(ctm.inverse());
+
+        marqueeRect = document.createElementNS(NS_SVG, "rect");
+        marqueeRect.setAttribute("class", "mm-marquee");
+        marqueeRect.setAttribute("x", String(local.x));
+        marqueeRect.setAttribute("y", String(local.y));
+        marqueeRect.setAttribute("width", "0");
+        marqueeRect.setAttribute("height", "0");
+        // 放到最顶层, 但在节点上方 → 让用户看到拖到哪些节点上
+        nodesLayer.parentNode.insertBefore(marqueeRect, nodesLayer);
+
+        marquee = {
+            startX: local.x,
+            startY: local.y,
+            moved: false,
+        };
+
+        function onMove(ev) {
+            if (!marqueeRect) return;
+            const pt2 = svg.createSVGPoint();
+            pt2.x = ev.clientX;
+            pt2.y = ev.clientY;
+            const cur = pt2.matrixTransform(svg.getScreenCTM().inverse());
+            const x = Math.min(marquee.startX, cur.x);
+            const y = Math.min(marquee.startY, cur.y);
+            const w = Math.abs(cur.x - marquee.startX);
+            const h = Math.abs(cur.y - marquee.startY);
+            if (w > 2 || h > 2) marquee.moved = true;
+            marqueeRect.setAttribute("x", String(x));
+            marqueeRect.setAttribute("y", String(y));
+            marqueeRect.setAttribute("width", String(w));
+            marqueeRect.setAttribute("height", String(h));
         }
+        function onUp() {
+            document.removeEventListener("mousemove", onMove);
+            document.removeEventListener("mouseup", onUp);
+            if (marqueeRect && marquee) {
+                if (marquee.moved) {
+                    // 框选: 计算相交节点
+                    const bx = parseFloat(marqueeRect.getAttribute("x"));
+                    const by = parseFloat(marqueeRect.getAttribute("y"));
+                    const bw = parseFloat(marqueeRect.getAttribute("width"));
+                    const bh = parseFloat(marqueeRect.getAttribute("height"));
+                    // 先清空选中
+                    selectedNodes.forEach(function (n) { n.classList.remove("selected"); });
+                    selectedNodes.clear();
+                    selectedNode = null;
+                    // 把相交的 manual + auto 节点都选上 (auto 也允许选中用来排版, 但拖拽时跳过)
+                    nodeById.forEach(function (el) {
+                        if (isNodeInRect(el, bx, by, bw, bh)) {
+                            selectedNodes.add(el);
+                            el.classList.add("selected");
+                            selectedNode = el;
+                        }
+                    });
+                    if (selectedNodes.size === 0) {
+                        // 框了个寂寞
+                        renderAnchors();
+                    } else {
+                        clearEdgeSelection();
+                        renderAnchors();
+                    }
+                } else {
+                    // 单纯空白点击 → 清空选中
+                    clearSelection();
+                }
+                if (marqueeRect.parentNode) marqueeRect.parentNode.removeChild(marqueeRect);
+            }
+            marqueeRect = null;
+            marquee = null;
+        }
+        document.addEventListener("mousemove", onMove);
+        document.addEventListener("mouseup", onUp);
     });
+
+    // 节点矩形与框选矩形相交判定 (用 g 的 data-x data-y data-w data-h / transform)
+    function isNodeInRect(el, rx, ry, rw, rh) {
+        const t = el.getAttribute("transform") || "";
+        const m = t.match(/translate\(([-\d.]+),([-\d.]+)\)/);
+        const x = m ? parseFloat(m[1]) : 0;
+        const y = m ? parseFloat(m[2]) : 0;
+        const w = parseFloat(el.getAttribute("data-w") || "120");
+        const h = parseFloat(el.getAttribute("data-h") || "60");
+        // 矩形相交: !(左 > 右 || 右 < 左 || 上 > 下 || 下 < 上)
+        return !(x + w < rx || x > rx + rw || y + h < ry || y > ry + rh);
+    }
 
     // ---- 工具栏 ----
     if (toolbar) {
         toolbar.addEventListener("click", function (e) {
             const btn = e.target.closest(".mm-tb-btn");
             if (!btn) return;
-            // 字体按钮（data-font）
-            const font = btn.getAttribute("data-font");
-            if (font) {
-                changeFontFamily(font);
-                return;
-            }
             // 撤销 / 前进
             if (btn.id === "mm-undo-btn") { doUndo(); return; }
             if (btn.id === "mm-redo-btn") { doRedo(); return; }
@@ -1221,6 +1417,8 @@
                 if (linkMode) exitLinkMode(); else enterLinkMode();
                 return;
             }
+            // 导出 PNG
+            if (btn.id === "mm-export-btn") { exportPNG(); return; }
             const shape = btn.getAttribute("data-shape");
             if (shape) {
                 addNode(shape, { startEdit: true });
@@ -1230,14 +1428,8 @@
                 if (selectedEdge) {
                     const id = parseInt(selectedEdge.getAttribute("data-id"), 10);
                     deleteEdge(id);
-                } else if (selectedNode) {
-                    const id = parseInt(selectedNode.getAttribute("data-id"), 10);
-                    const kind = selectedNode.getAttribute("data-kind");
-                    if (kind === "auto") {
-                        showToast("自动节点无法删除（它是项目数据生成的）", "error");
-                        return;
-                    }
-                    deleteNode(id);
+                } else if (selectedNodes.size > 0) {
+                    deleteSelectedNodes();
                 }
             } else if (btn.id === "mm-clear-manual-btn") {
                 if (!confirm("确认清空所有手动节点？\n自动树节点与手动连线不受影响。")) return;
@@ -1249,7 +1441,7 @@
                 });
                 toDelete.forEach(deleteNode);
             } else if (btn.id === "mm-font-inc" || btn.id === "mm-font-dec" || btn.id === "mm-font-reset") {
-                changeFontSize(btn.id === "mm-font-inc" ? +2 : btn.id === "mm-font-dec" ? -2 : 0);
+                changeFontSize(btn.id === "mm-font-inc" ? +FONT_STEP : btn.id === "mm-font-dec" ? -FONT_STEP : 0);
             }
         });
     }
@@ -1258,35 +1450,61 @@
     if (undoBtn) undoBtn.addEventListener("click", doUndo);
     if (redoBtn) redoBtn.addEventListener("click", doRedo);
 
+    // ---- 字体下拉框 ----
+    const fontSelect = document.getElementById("mm-font-select");
+    if (fontSelect) {
+        fontSelect.addEventListener("change", function () {
+            const v = fontSelect.value;
+            changeFontFamily(v);
+            // 视觉上回滚到上次 (changeFontFamily 内部会修改 data-font-family)
+            // 但下拉框要保持显示用户选的, 不回滚
+        });
+    }
+
     // ---- 字号调整 ----
     // 选中节点 → 调整它的 font_size；无选中 → 提示
     // +2 / -2 / 0(=默认 13)
     const FONT_MIN = 8, FONT_MAX = 96, FONT_DEFAULT = 13, FONT_STEP = 2;
     function getCurrentFontSize() {
-        if (!selectedNode) return FONT_DEFAULT;
-        const lbl = selectedNode.querySelector(".mm-label");
+        if (selectedNodes.size === 0) return FONT_DEFAULT;
+        const el = selectedNode || selectedNodes.values().next().value;
+        const lbl = el.querySelector(".mm-label");
         if (!lbl) return FONT_DEFAULT;
         // 优先读 inline style（活动编辑），其次 data-font-size（持久值）
         const inline = (lbl.getAttribute("style") || "").match(/font-size:\s*(\d+)/);
         if (inline) return parseInt(inline[1], 10);
-        return parseInt(selectedNode.getAttribute("data-font-size") || FONT_DEFAULT, 10);
+        return parseInt(el.getAttribute("data-font-size") || FONT_DEFAULT, 10);
     }
     async function changeFontSize(deltaOrZero) {
-        if (!selectedNode) {
+        if (selectedNodes.size === 0) {
             showToast("请先选中一个节点", "error");
             return;
         }
-        const id = parseInt(selectedNode.getAttribute("data-id"), 10);
-        const cur = getCurrentFontSize();
-        let next;
-        if (deltaOrZero === 0) next = FONT_DEFAULT;
-        else next = Math.min(FONT_MAX, Math.max(FONT_MIN, cur + deltaOrZero));
-        if (next === cur) return;
-        // 先本地更新（乐观），失败时让 patchNode 的错误 toast 兜底
-        const lbl = selectedNode.querySelector(".mm-label");
-        if (lbl) lbl.setAttribute("style", "font-size:" + next + "px");
-        selectedNode.setAttribute("data-font-size", String(next));
-        await patchNode(id, { font_size: next });
+        // 多选: 对每个 manual 节点应用 (auto 节点 font_size 跟着同步节点走, 不让手动改)
+        const targets = [];
+        selectedNodes.forEach(function (el) {
+            if (el.getAttribute("data-kind") !== "manual") return;
+            const lbl = el.querySelector(".mm-label");
+            const inline = (lbl ? lbl.getAttribute("style") || "" : "").match(/font-size:\s*(\d+)/);
+            const cur = inline ? parseInt(inline[1], 10) : parseInt(el.getAttribute("data-font-size") || FONT_DEFAULT, 10);
+            let next;
+            if (deltaOrZero === 0) next = FONT_DEFAULT;
+            else next = Math.min(FONT_MAX, Math.max(FONT_MIN, cur + deltaOrZero));
+            if (next !== cur) targets.push({ el: el, id: parseInt(el.getAttribute("data-id"), 10), next: next });
+        });
+        const skipped = selectedNodes.size - targets.length;
+        // 先本地更新（乐观）
+        targets.forEach(function (t) {
+            const lbl = t.el.querySelector(".mm-label");
+            if (lbl) lbl.setAttribute("style", "font-size:" + t.next + "px");
+            t.el.setAttribute("data-font-size", String(t.next));
+        });
+        for (const t of targets) {
+            await patchNode(t.id, { font_size: t.next });
+        }
+        if (skipped > 0 && targets.length === 0) {
+            showToast("自动节点字号由项目数据决定，不能改", "error");
+        }
     }
 
     // ---- 同步按钮 ----
@@ -1377,23 +1595,46 @@
             return; // 边被选中时不再吃其他节点快捷键
         }
 
+        // ===== Ctrl+A → 全选 =====
+        if (mod && !e.shiftKey && (e.key === "a" || e.key === "A")) {
+            e.preventDefault();
+            selectedNodes.forEach(function (n) { n.classList.remove("selected"); });
+            selectedNodes.clear();
+            selectedNode = null;
+            nodeById.forEach(function (el) {
+                selectedNodes.add(el);
+                el.classList.add("selected");
+            });
+            if (selectedNodes.size > 0) selectedNode = Array.from(selectedNodes).pop();
+            renderAnchors();
+            return;
+        }
+
         // ===== 选中节点 =====
-        if (!selectedNode) return;
+        if (selectedNodes.size === 0) return;
         const id = parseInt(selectedNode.getAttribute("data-id"), 10);
         const kind = selectedNode.getAttribute("data-kind");
 
-        if ((e.key === "Delete" || e.key === "Backspace") && kind === "manual") {
+        if ((e.key === "Delete" || e.key === "Backspace")) {
             e.preventDefault();
-            deleteNode(id);
+            // 多选时: 批量删 manual; 单选 auto 提示
+            if (selectedNodes.size === 1 && kind === "auto") {
+                showToast("自动节点无法删除（它是项目数据生成的）", "error");
+                return;
+            }
+            deleteSelectedNodes();
         } else if (mod && (e.key === "d" || e.key === "D")) {
             e.preventDefault();
-            if (kind === "manual") {
+            if (selectedNodes.size === 1 && kind === "manual") {
                 handleContextAction("duplicate");
+            } else if (selectedNodes.size > 1) {
+                showToast("多选状态下不支持复制（请单选后 Ctrl+D）", "warn");
             } else {
                 showToast("自动节点无法复制", "error");
             }
         } else if (mod && (e.key === "c" || e.key === "C")) {
-            if (kind === "manual") {
+            // 仅单选 manual 时复制; 多选不抢键盘
+            if (selectedNodes.size === 1 && kind === "manual") {
                 e.preventDefault();
                 handleContextAction("copy");
             }
@@ -1405,16 +1646,21 @@
         } else if (e.key === "ArrowUp" || e.key === "ArrowDown" || e.key === "ArrowLeft" || e.key === "ArrowRight") {
             e.preventDefault();
             const step = e.shiftKey ? 10 : 1;
-            const t = selectedNode.getAttribute("transform") || "";
-            const m = t.match(/translate\(([-\d.]+),([-\d.]+)\)/);
-            let nx = m ? parseFloat(m[1]) : 0;
-            let ny = m ? parseFloat(m[2]) : 0;
-            if (e.key === "ArrowUp") ny = Math.max(0, ny - step);
-            if (e.key === "ArrowDown") ny = ny + step;
-            if (e.key === "ArrowLeft") nx = Math.max(0, nx - step);
-            if (e.key === "ArrowRight") nx = nx + step;
-            selectedNode.setAttribute("transform", "translate(" + nx + "," + ny + ")");
-            pendingPositions[id] = { x: nx, y: ny };
+            // 多选: 一起平移
+            selectedNodes.forEach(function (el) {
+                if (el.getAttribute("data-kind") === "auto") return;
+                const t = el.getAttribute("transform") || "";
+                const m = t.match(/translate\(([-\d.]+),([-\d.]+)\)/);
+                let nx = m ? parseFloat(m[1]) : 0;
+                let ny = m ? parseFloat(m[2]) : 0;
+                if (e.key === "ArrowUp") ny = Math.max(0, ny - step);
+                if (e.key === "ArrowDown") ny = ny + step;
+                if (e.key === "ArrowLeft") nx = Math.max(0, nx - step);
+                if (e.key === "ArrowRight") nx = nx + step;
+                el.setAttribute("transform", "translate(" + nx + "," + ny + ")");
+                const eid = parseInt(el.getAttribute("data-id"), 10);
+                pendingPositions[eid] = { x: nx, y: ny };
+            });
             if (saveTimer) clearTimeout(saveTimer);
             saveTimer = setTimeout(flushPositions, 400);
             redrawEdges();
@@ -1478,5 +1724,131 @@
         if (contextMenu && !contextMenu.contains(e.target)) hideContextMenu();
         if (edgeContextMenu && !edgeContextMenu.contains(e.target)) hideEdgeContextMenu();
     });
+
+    // ===================================================================
+    // 导出 PNG: 克隆 SVG → 移除网格/锚点/选中态 → 内联 CSS → bbox 适配 → 序列化成 dataURL → canvas → 下载
+    // ===================================================================
+    async function exportPNG() {
+        setSaveState("saving");
+        try {
+            const clone = svg.cloneNode(true);
+
+            // 去掉背景网格
+            const gridBg = clone.querySelector(".mm-grid-bg");
+            if (gridBg) gridBg.parentNode.removeChild(gridBg);
+            // 去掉锚点层 + 临时连线层 (导出图不需要)
+            ["#mm-anchors-layer", "#mm-temp-edge-layer"].forEach(function (sel) {
+                const el = clone.querySelector(sel);
+                if (el && el.parentNode) el.parentNode.removeChild(el);
+            });
+            // 去掉当前选中态 (selected class + 框选)
+            clone.querySelectorAll(".selected").forEach(function (el) { el.classList.remove("selected"); });
+            const mq = clone.querySelector(".mm-marquee");
+            if (mq && mq.parentNode) mq.parentNode.removeChild(mq);
+
+            // 计算 viewBox (所有节点的 bbox, 加 padding)
+            let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+            clone.querySelectorAll(".mm-node").forEach(function (g) {
+                const t = g.getAttribute("transform") || "";
+                const m = t.match(/translate\(([-\d.]+),([-\d.]+)\)/);
+                const x = m ? parseFloat(m[1]) : 0;
+                const y = m ? parseFloat(m[2]) : 0;
+                const w = parseFloat(g.getAttribute("data-w") || "120");
+                const h = parseFloat(g.getAttribute("data-h") || "60");
+                minX = Math.min(minX, x);
+                minY = Math.min(minY, y);
+                maxX = Math.max(maxX, x + w);
+                maxY = Math.max(maxY, y + h);
+            });
+            if (!isFinite(minX)) {
+                showToast("画布为空，无可导出的节点", "warn");
+                setSaveState("saved");
+                return;
+            }
+            const padding = 24;
+            minX -= padding; minY -= padding;
+            maxX += padding; maxY += padding;
+            const vbW = maxX - minX;
+            const vbH = maxY - minY;
+            // 2x 高清
+            const scale = 2;
+            clone.setAttribute("viewBox", minX + " " + minY + " " + vbW + " " + vbH);
+            clone.setAttribute("width", String(vbW * scale));
+            clone.setAttribute("height", String(vbH * scale));
+            clone.removeAttribute("class");
+
+            // 内联 CSS (克隆出的 SVG 不会自动加载外部样式表)
+            // 使用具体色值, 不依赖 CSS 变量
+            const cssText = [
+                ".mm-node .mm-shape { stroke: #d1d5db; stroke-width: 1.5; fill: #ffffff; }",
+                ".mm-node.shape-sticky-yellow .mm-shape { fill: #fef9c3; stroke: #facc15; }",
+                ".mm-node.shape-sticky-pink .mm-shape { fill: #fce7f3; stroke: #f472b6; }",
+                ".mm-node.shape-sticky-blue .mm-shape { fill: #dbeafe; stroke: #60a5fa; }",
+                ".mm-node .mm-label { display:flex; align-items:center; justify-content:center; width:100%; height:100%; padding:4px; box-sizing:border-box; text-align:center; line-height:1.3; color:#1f2937; word-break:break-word; }",
+                ".mm-edge { fill: none; stroke: #d1d5db; stroke-width: 1.5; }",
+                ".mm-edge.mm-edge-auto { stroke: #A78BFA; opacity: 0.55; }",
+                ".mm-edge.mm-edge-manual { stroke: #7C3AED; stroke-width: 2; }",
+                ".mm-edge.mm-edge-temp { display: none; }",
+            ].join("\n");
+            const styleEl = document.createElementNS(NS_SVG, "style");
+            styleEl.setAttribute("type", "text/css");
+            styleEl.textContent = cssText;
+            clone.insertBefore(styleEl, clone.firstChild);
+
+            // marker 的 currentColor 在克隆里不可靠, 给箭头一个明确颜色
+            clone.querySelectorAll("marker path").forEach(function (p) {
+                p.setAttribute("fill", "#7C3AED");
+            });
+
+            // 序列化
+            const svgString = new XMLSerializer().serializeToString(clone);
+            const svgBlob = new Blob(
+                ['<?xml version="1.0" encoding="UTF-8"?>\n', svgString],
+                { type: "image/svg+xml;charset=utf-8" }
+            );
+            const url = URL.createObjectURL(svgBlob);
+
+            const img = new Image();
+            img.onload = function () {
+                const canvas = document.createElement("canvas");
+                canvas.width = Math.ceil(vbW * scale);
+                canvas.height = Math.ceil(vbH * scale);
+                const ctx = canvas.getContext("2d");
+                // 白底 (PNG 透明背景不好看)
+                ctx.fillStyle = "#ffffff";
+                ctx.fillRect(0, 0, canvas.width, canvas.height);
+                ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+                URL.revokeObjectURL(url);
+
+                canvas.toBlob(function (blob) {
+                    if (!blob) {
+                        showToast("导出失败：canvas 转换失败", "error");
+                        setSaveState("error");
+                        return;
+                    }
+                    const a = document.createElement("a");
+                    a.href = URL.createObjectURL(blob);
+                    const ts = new Date().toISOString().slice(0, 19).replace(/[:T]/g, "-");
+                    a.download = "mindmap-" + projectId + "-" + ts + ".png";
+                    document.body.appendChild(a);
+                    a.click();
+                    document.body.removeChild(a);
+                    setTimeout(function () { URL.revokeObjectURL(a.href); }, 1500);
+                    showToast("已导出 PNG");
+                    setSaveState("saved");
+                }, "image/png");
+            };
+            img.onerror = function () {
+                URL.revokeObjectURL(url);
+                showToast("导出失败：SVG 渲染失败（可能是字体或 foreignObject 问题）", "error");
+                setSaveState("error");
+            };
+            img.src = url;
+        } catch (e) {
+            console.error(e);
+            showToast("导出失败：" + e.message, "error");
+            setSaveState("error");
+        }
+    }
 
 })();

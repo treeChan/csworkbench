@@ -1269,6 +1269,7 @@ def _render_mindmap_node(node) -> str:
         f'data-kind="{xml_escape(node.kind)}" '
         f'data-shape="{xml_escape(node.shape_type)}"'
         f'{parent_attr}{z_attr} '
+        f'data-w="{w}" data-h="{h}" '
         f'transform="translate({x},{y})">'
     )
 

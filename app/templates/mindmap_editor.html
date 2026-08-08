@@ -58,12 +58,14 @@
         <div class="mm-toolbar-sep"></div>
         <div class="mm-toolbar-group">
             <span class="mm-toolbar-label">字体</span>
-            <button class="mm-tb-btn mm-font mm-font-system" data-font="system" title="默认字体">Aa</button>
-            <button class="mm-tb-btn mm-font mm-font-hei" data-font="hei" title="黑体/PingFang">黑</button>
-            <button class="mm-tb-btn mm-font mm-font-song" data-font="song" title="宋体/SimSun">宋</button>
-            <button class="mm-tb-btn mm-font mm-font-times" data-font="times" title="Times New Roman">T</button>
-            <button class="mm-tb-btn mm-font mm-font-kai" data-font="kai" title="楷体">楷</button>
-            <button class="mm-tb-btn mm-font mm-font-mono" data-font="mono" title="等宽">M</button>
+            <select id="mm-font-select" class="mm-font-select" title="字体 (支持多选批量)">
+                <option value="system">默认</option>
+                <option value="hei">黑体 / PingFang</option>
+                <option value="song">宋体 / SimSun</option>
+                <option value="times">Times New Roman</option>
+                <option value="kai">楷体</option>
+                <option value="mono">等宽</option>
+            </select>
         </div>
 
         <div class="mm-toolbar-sep"></div>
@@ -75,6 +77,9 @@
 
         <div class="mm-toolbar-sep"></div>
         <button id="mm-link-btn" class="mm-tb-btn" title="进入连线模式 (L)：再点两个节点完成连线">🔗 连线</button>
+
+        <div class="mm-toolbar-sep"></div>
+        <button id="mm-export-btn" class="mm-tb-btn" title="导出整张画布为 PNG 图片">📷 导出 PNG</button>
 
         <div class="mm-toolbar-sep"></div>
         <button id="mm-delete-btn" class="mm-tb-btn mm-danger" title="删除选中 (Del)">🗑 删除选中</button>
@@ -99,7 +104,7 @@
                 <!-- 连线箭头 marker（auto edges 不挂箭头；手动连线按 data-arrow 决定） -->
                 <marker id="mm-arrow" viewBox="0 0 10 10" refX="9" refY="5"
                         markerWidth="8" markerHeight="8" orient="auto-start-reverse">
-                    <path d="M 0 0 L 10 5 L 0 10 z" fill="currentColor"/>
+                    <path d="M 0 0 L 10 5 L 0 10 z" style="fill: var(--c-primary, #7C3AED);"/>
                 </marker>
             </defs>
             <rect class="mm-grid-bg" width="100%" height="100%" fill="url(#mm-grid)"/>

@@ -1288,6 +1288,31 @@ button.pipeline-step:focus { outline: 2px solid var(--c-primary-light); outline-
     color: var(--c-primary, #7C3AED);
 }
 
+/* 框选矩形 */
+.mm-marquee {
+    fill: var(--c-primary, #7C3AED);
+    fill-opacity: 0.08;
+    stroke: var(--c-primary, #7C3AED);
+    stroke-width: 1;
+    stroke-dasharray: 4 3;
+    pointer-events: none;
+}
+
+/* 字体下拉框 */
+.mm-font-select {
+    font: inherit;
+    padding: 2px 8px;
+    border: 1px solid var(--c-border, #d1d5db);
+    border-radius: 6px;
+    background: var(--c-surface, #fff);
+    color: inherit;
+    cursor: pointer;
+    height: 26px;
+    line-height: 1;
+}
+.mm-font-select:hover { border-color: var(--c-primary, #7C3AED); }
+.mm-font-select:focus { outline: 2px solid var(--c-primary-light, #A78BFA); outline-offset: 1px; }
+
 .mm-shape {
     stroke: var(--c-border, #d1d5db);
     stroke-width: 1.5px;
@@ -1431,10 +1456,10 @@ button.pipeline-step:focus { outline: 2px solid var(--c-primary-light); outline-
     cursor: default;
     transition: stroke 0.12s, stroke-width 0.12s;
 }
-/* 自动树连线：浅灰、虚一点（不抢戏） */
+/* 自动树连线：浅紫、低饱和（不抢戏，但色调与手动连线一致） */
 .mm-edge.mm-edge-auto {
-    stroke: var(--c-border, #d1d5db);
-    opacity: 0.7;
+    stroke: var(--c-primary-light, #A78BFA);
+    opacity: 0.55;
 }
 /* 手动连线：紫色，明显 */
 .mm-edge.mm-edge-manual {
