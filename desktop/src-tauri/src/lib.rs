@@ -136,7 +136,8 @@ async fn check_for_updates(
 #[tauri::command]
 async fn start_auto_check(app: tauri::AppHandle, channel: Option<String>) -> Result<(), String> {
     {
-        let mut started = app.state::<AutoCheckStarted>().0.lock().unwrap();
+        let started_state = app.state::<AutoCheckStarted>();
+        let mut started = started_state.0.lock().unwrap();
         if *started {
             return Ok(()); // 已有循环在跑，避免页面切换重复启动
         }
@@ -185,25 +186,15 @@ async fn install_update(app: tauri::AppHandle) -> Result<(), String> {
         );
     };
     let installed = update.download_and_install(progress, || {}).await;
-    let _ = app_emit.emit("update://download-done", ());
+    let _ = app.clone().emit("update://download-done", ());
     match installed {
+        // app.restart() 返回 never type (!)，成功后直接重启，不需要返回 Ok。
         Ok(_) => {
             app.restart();
-            Ok(())
+            unreachable!() // restart() 已退出进程，永不走到这里
         }
         Err(e) => Err(format!("更新下载/安装失败：{e}")),
     }
-}
-
-/// 设置页「检查更新」按钮入口（web 版无 __TAURI__ 时按钮被前端隐藏）。
-/// channel 可选："stable"（默认）/ "preview"。
-#[tauri::command]
-async fn check_for_updates(
-    app: tauri::AppHandle,
-    channel: Option<String>,
-) -> Result<String, String> {
-    let channel = channel.as_deref().unwrap_or("stable");
-    check_and_prompt(app, channel).await
 }
 
 /// 轮询直到 127.0.0.1:port 的 HTTP 服务可响应;成功 true,超时(30s)false。

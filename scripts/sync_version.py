@@ -38,7 +38,7 @@ def read_version() -> str:
             return ver
     ver = VERSION_FILE.read_text(encoding="utf-8").strip()
     if not ver:
-        raise SystemExit("VERSION 文件为空，无法同步")
+        raise SystemExit("VERSION file is empty, cannot sync")
     return ver
 
 
@@ -53,7 +53,7 @@ def sync_cargo_toml(version: str) -> None:
         flags=re.MULTILINE,
     )
     if n != 1:
-        raise SystemExit("未在 Cargo.toml 找到 [package] version，请检查格式")
+        raise SystemExit("[package] version not found in Cargo.toml")
     path.write_text(new, encoding="utf-8")
 
 
@@ -71,8 +71,9 @@ def main() -> None:
     version = read_version()
     sync_cargo_toml(version)
     sync_package_json(version)
-    print(f"✅ 版本号已同步为 {version}")
-    print("   VERSION（唯一源）→ Cargo.toml + package.json")
+    # 保持 stdout 纯 ASCII：Windows CI 默认 stdout 是 cp1252，中文/emoji 会 UnicodeEncodeError。
+    print(f"[sync-version] version synced to {version}")
+    print("  VERSION (single source) -> Cargo.toml + package.json")
 
 
 if __name__ == "__main__":
