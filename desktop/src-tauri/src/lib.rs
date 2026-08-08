@@ -49,9 +49,9 @@ fn data_dir(app: &tauri::App) -> PathBuf {
 /// channel: "stable"（默认）/ "preview"。preview 用固定 tag 的 endpoint，
 /// stable 走 tauri.conf.json 默认 endpoint。
 async fn check_and_prompt(app: tauri::AppHandle, channel: &str) -> Result<String, String> {
-    let mut updater = app
-        .updater()
-        .map_err(|e| format!("更新组件初始化失败：{e}"))?;
+    // app.updater_builder() 返回 UpdaterBuilder（有 .endpoints() / .build()）；
+    // app.updater() 是它的 build() 结果（无 .endpoints()）。
+    let mut updater = app.updater_builder();
     if let Some(endpoint) = channel_endpoint(channel) {
         // 运行时覆盖 endpoint（UpdaterBuilder.endpoints 接受 Vec<Url>）
         let url = url::Url::parse(&endpoint).map_err(|e| format!("更新地址解析失败：{e}"))?;
@@ -59,6 +59,7 @@ async fn check_and_prompt(app: tauri::AppHandle, channel: &str) -> Result<String
             .endpoints(vec![url])
             .map_err(|e| format!("更新配置失败：{e}"))?;
     }
+    let updater = updater.build().map_err(|e| format!("更新组件初始化失败：{e}"))?;
     let update = match updater.check().await {
         Ok(u) => u,
         Err(e) => return Err(format!("无法连接更新服务器：{e}")),
