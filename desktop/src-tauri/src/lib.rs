@@ -188,11 +188,8 @@ async fn install_update(app: tauri::AppHandle) -> Result<(), String> {
     let installed = update.download_and_install(progress, || {}).await;
     let _ = app.clone().emit("update://download-done", ());
     match installed {
-        // app.restart() 返回 never type (!)，成功后直接重启，不需要返回 Ok。
-        Ok(_) => {
-            app.restart();
-            unreachable!() // restart() 已退出进程，永不走到这里
-        }
+        // app.restart() 返回 never type (!)，可隐式转换成任意类型，直接作为 Ok 分支结果。
+        Ok(_) => app.restart(),
         Err(e) => Err(format!("更新下载/安装失败：{e}")),
     }
 }

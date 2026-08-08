@@ -87,15 +87,17 @@ jobs:
       # （latest.json 的 notes 来自 releaseBody 参数；不设则更新弹窗里不展示更新日志）
       - name: Read release notes
         id: notes
+        # 显式用 bash：Windows runner 默认是 PowerShell，`if [ -f ]` 这类 bash 语法会解析失败
+        shell: bash
         run: |
           FILE="docs/release-notes.md"
           if [ -f "$FILE" ]; then
             echo "releaseBody<<EOF" >> "$GITHUB_OUTPUT"
             cat "$FILE" >> "$GITHUB_OUTPUT"
             echo "EOF" >> "$GITHUB_OUTPUT"
-            echo "✅ 读取 $FILE 作为 release notes"
+            echo "Read $FILE as release notes"
           else
-            echo "⚠️ 未找到 $FILE，Release 将无更新日志"
+            echo "WARN: $FILE not found, release will have no update log"
           fi
 
       - name: Build Tauri app (bundle + upload)
