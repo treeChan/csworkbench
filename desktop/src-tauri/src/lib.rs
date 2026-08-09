@@ -165,7 +165,9 @@ async fn install_update(app: tauri::AppHandle, channel: Option<String>) -> Resul
     let channel = channel.as_deref().unwrap_or("stable");
     // 优先取 check_and_notify 暂存的 Update；若因极端时序（弹窗已显示但暂存被消费）
     // 为空，现场重新检查兜底——宁可多查一次，也不能让用户「提示有更新却装不上」。
-    let update = match app.state::<PendingUpdate>().0.lock().unwrap().take() {
+    // 注意：MutexGuard 非 Send，必须先在独立语句里 take() 释放锁，再跨 await。
+    let pending_update = app.state::<PendingUpdate>().0.lock().unwrap().take();
+    let update = match pending_update {
         Some(u) => u,
         None => match fetch_update(&app, channel).await? {
             Some(u) => u,
