@@ -404,6 +404,7 @@ function selectQuickType(btn) {
                : (api && api.invoke ? api.invoke : null);
     var modal = document.getElementById("update-modal");
     if (!invoke || !modal) return;   // web 版 / 无弹窗元素 → 全部跳过
+    modal.hidden = true;             // 防御：确保初始隐藏（配合 [hidden] CSS 规则）
 
     var shown = false;               // 本次会话已弹过 → 不再重复打扰
     var versionEl = document.getElementById("update-modal-version");
@@ -418,11 +419,80 @@ function selectQuickType(btn) {
     var channel = "stable";
     try { channel = localStorage.getItem("wb-update-channel") === "preview" ? "preview" : "stable"; } catch (e) {}
 
+    /* ===== 极简 Markdown 渲染（更新说明用）=====
+       覆盖日常子集：标题 / 粗体 / 斜体 / 行内代码 / 代码块 / 列表 / 引用 /
+       链接 / 水平线 / 段落。**先 HTML 转义再白名单替换 → 无 XSS 注入**；
+       链接仅允许 http(s)，其余语法按纯文本原样显示（不崩、不注入）。 */
+    function renderMd(src) {
+        src = src || "";
+        var esc = src
+            .replace(/&/g, "&amp;")
+            .replace(/</g, "&lt;")
+            .replace(/>/g, "&gt;");
+        // 行内：代码（先做，避免误伤代码里的 * 与 [）→ 粗体 → 斜体 → 链接
+        esc = esc
+            .replace(/`([^`\n]+)`/g, "<code>$1</code>")
+            .replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>")
+            .replace(/(^|[^*\w])\*([^*\n]+)\*/g, "$1<em>$2</em>")
+            .replace(
+                /\[([^\]]+)\]\((https?:\/\/[^\s)\]]+)\)/g,
+                '<a href="$2" target="_blank" rel="noopener">$1</a>'
+            );
+        var lines = esc.split(/\n/);
+        var out = [], para = [], listType = null, inCode = false;
+        function flushPara() {
+            if (para.length) { out.push("<p>" + para.join("<br>") + "</p>"); para = []; }
+        }
+        function closeList() {
+            if (listType) { out.push(listType === "ul" ? "</ul>" : "</ol>"); listType = null; }
+        }
+        function addList(type, item) {
+            if (listType !== type) { closeList(); listType = type; out.push(type === "ul" ? "<ul>" : "<ol>"); }
+            out.push("<li>" + item + "</li>");
+        }
+        for (var i = 0; i < lines.length; i++) {
+            var ln = lines[i];
+            var t = ln.trim();
+            if (inCode) {
+                if (t.indexOf("```") === 0) {
+                    inCode = false;
+                    out[out.length - 1] += "</code></pre>";   // 追加到同一 <pre> 元素，避免 join 插入换行
+                } else {
+                    out[out.length - 1] += ln + "\n";
+                }
+                continue;
+            }
+            if (t.indexOf("```") === 0) {
+                flushPara(); closeList();
+                inCode = true;
+                out.push("<pre><code>");
+                continue;
+            }
+            if (!t) { flushPara(); closeList(); continue; }
+            var h = t.match(/^(#{1,4})\s+(.*)$/);
+            if (h) { flushPara(); closeList(); var lv = Math.min(6, h[1].length + 2); out.push("<h" + lv + ">" + h[2] + "</h" + lv + ">"); continue; }
+            if (/^(-{3,}|\*{3,}|_{3,})\s*$/.test(t)) { flushPara(); closeList(); out.push("<hr>"); continue; }
+            if (t.indexOf("&gt; ") === 0) { flushPara(); closeList(); out.push("<blockquote>" + t.slice(5) + "</blockquote>"); continue; }
+            var ul = t.match(/^[-*]\s+(.*)$/);
+            if (ul) { flushPara(); addList("ul", ul[1]); continue; }
+            var ol = t.match(/^\d+[.、]\s+(.*)$/);
+            if (ol) { flushPara(); addList("ol", ol[1]); continue; }
+            closeList();
+            para.push(ln);
+        }
+        flushPara(); closeList();
+        if (inCode) out.push("</code></pre>");   // 未闭合的代码围栏兜底
+        return out.join("\n");
+    }
+
     function openModal(info) {
         shown = true;
         if (versionEl) versionEl.textContent = "v" + info.version;
         if (notesEl) {
-            notesEl.textContent = info.notes || "更新说明见 GitHub Release 页面。";
+            // 完整展示更新说明（markdown 渲染，不截断）；空说明给一句兜底。
+            notesEl.innerHTML = info.notes
+                ? renderMd(info.notes)
+                : "更新说明见 GitHub Release 页面。";
         }
         modal.hidden = false;
     }
@@ -471,7 +541,7 @@ function selectQuickType(btn) {
         laterBtn.disabled = true;
         progWrap.hidden = false;
         setProgress(0, "准备下载…");
-        invoke("install_update")
+        invoke("install_update", { channel: channel })
             .then(function () { /* 安装成功 → Rust 已触发重启 */ })
             .catch(function (err) {
                 setProgress(0, "更新失败：" + err);

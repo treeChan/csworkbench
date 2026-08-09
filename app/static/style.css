@@ -1159,6 +1159,9 @@ button.pipeline-step:focus { outline: 2px solid var(--c-primary-light); outline-
     background: rgba(15, 23, 42, 0.55);   /* 统一半透明遮罩，亮暗主题通用 */
     backdrop-filter: blur(2px);
 }
+/* 关键：hidden 属性必须能覆盖 display:flex，否则弹窗从页面加载起就常驻显示、
+   点「稍后」关不掉（作者样式 display:flex 优先于 UA 的 [hidden]{display:none}）。 */
+.update-modal-backdrop[hidden] { display: none !important; }
 .update-modal {
     width: min(460px, calc(100vw - 40px));
     max-height: calc(100vh - 80px);
@@ -1204,10 +1207,61 @@ button.pipeline-step:focus { outline: 2px solid var(--c-primary-light); outline-
     font-size: 12.5px;
     line-height: 1.7;
     color: var(--c-text-soft);
-    white-space: pre-wrap;
     word-break: break-word;
-    max-height: 220px;
+    max-height: 240px;
     overflow-y: auto;
+}
+/* Markdown 渲染后的说明元素排版（标题/段落/列表/代码/引用等） */
+.update-modal-notes h3, .update-modal-notes h4,
+.update-modal-notes h5, .update-modal-notes h6 {
+    margin: 10px 0 4px;
+    font-size: 14px;
+    font-weight: 700;
+    color: var(--c-text);
+}
+.update-modal-notes p { margin: 4px 0; }
+.update-modal-notes ul, .update-modal-notes ol {
+    margin: 4px 0;
+    padding-left: 20px;
+}
+.update-modal-notes li { margin: 2px 0; }
+.update-modal-notes code {
+    background: var(--c-surface);
+    border: 1px solid var(--c-border-soft);
+    border-radius: 4px;
+    padding: 1px 4px;
+    font-size: 12px;
+}
+.update-modal-notes pre {
+    margin: 6px 0;
+    padding: 8px 10px;
+    background: var(--c-surface);
+    border: 1px solid var(--c-border-soft);
+    border-radius: 6px;
+    overflow-x: auto;
+    white-space: pre;
+}
+.update-modal-notes pre code {
+    background: none;
+    border: none;
+    padding: 0;
+    font-size: 12px;
+}
+.update-modal-notes blockquote {
+    margin: 6px 0;
+    padding: 4px 10px;
+    border-left: 3px solid var(--c-border);
+    background: var(--c-surface);
+    border-radius: 4px;
+}
+.update-modal-notes hr {
+    border: none;
+    border-top: 1px solid var(--c-border-soft);
+    margin: 8px 0;
+}
+.update-modal-notes a {
+    color: var(--c-primary);
+    text-decoration: underline;
 }
 .update-modal-actions {
     display: flex;

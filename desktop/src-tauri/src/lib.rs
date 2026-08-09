@@ -45,6 +45,26 @@ fn channel_endpoint(channel: &str) -> Option<String> {
     }
 }
 
+/// 构建对应渠道的 Updater 并检查更新（网络结果），不依赖前端状态。
+/// check_and_notify 与 install_update 兜底共用。
+async fn fetch_update(
+    app: &tauri::AppHandle,
+    channel: &str,
+) -> Result<Option<Update>, String> {
+    // app.updater_builder() 返回 UpdaterBuilder（有 .endpoints() / .build()）；
+    // app.updater() 是它的 build() 结果（无 .endpoints()）。
+    let mut updater = app.updater_builder();
+    if let Some(endpoint) = channel_endpoint(channel) {
+        // 运行时覆盖 endpoint（UpdaterBuilder.endpoints 接受 Vec<Url>）
+        let url = url::Url::parse(&endpoint).map_err(|e| format!("更新地址解析失败：{e}"))?;
+        updater = updater
+            .endpoints(vec![url])
+            .map_err(|e| format!("更新配置失败：{e}"))?;
+    }
+    let updater = updater.build().map_err(|e| format!("更新组件初始化失败：{e}"))?;
+    updater.check().await.map_err(|e| format!("无法连接更新服务器：{e}"))
+}
+
 /// 持有 sidecar 子进程句柄,退出时 kill。
 struct Sidecar(Mutex<Option<CommandChild>>);
 
@@ -72,20 +92,9 @@ fn data_dir(app: &tauri::App) -> PathBuf {
 /// channel: "stable"（默认）/ "preview"。preview 用固定 tag 的 endpoint，
 /// stable 走 tauri.conf.json 默认 endpoint。
 async fn check_and_notify(app: &tauri::AppHandle, channel: &str) -> Result<String, String> {
-    // app.updater_builder() 返回 UpdaterBuilder（有 .endpoints() / .build()）；
-    // app.updater() 是它的 build() 结果（无 .endpoints()）。
-    let mut updater = app.updater_builder();
-    if let Some(endpoint) = channel_endpoint(channel) {
-        // 运行时覆盖 endpoint（UpdaterBuilder.endpoints 接受 Vec<Url>）
-        let url = url::Url::parse(&endpoint).map_err(|e| format!("更新地址解析失败：{e}"))?;
-        updater = updater
-            .endpoints(vec![url])
-            .map_err(|e| format!("更新配置失败：{e}"))?;
-    }
-    let updater = updater.build().map_err(|e| format!("更新组件初始化失败：{e}"))?;
-    let update = match updater.check().await {
+    let update = match fetch_update(app, channel).await {
         Ok(u) => u,
-        Err(e) => return Err(format!("无法连接更新服务器：{e}")),
+        Err(e) => return Err(e),
     };
     let Some(update) = update else {
         return Ok("当前已是最新版本".to_string());
@@ -93,18 +102,8 @@ async fn check_and_notify(app: &tauri::AppHandle, channel: &str) -> Result<Strin
 
     let version = update.version.clone();
     // release notes（latest.json 的 body 字段，来自 GitHub Release 说明，可能缺失）。
-    // 前端弹窗里展示更新日志；太长截断，避免弹窗撑得过高。
-    let raw_body = update.body.as_deref().unwrap_or("").trim();
-    let notes = if raw_body.is_empty() {
-        String::new()
-    } else {
-        let truncated: String = raw_body.chars().take(600).collect();
-        if truncated.chars().count() < raw_body.chars().count() {
-            format!("{truncated}\n…（已截断，完整说明见 GitHub Release）")
-        } else {
-            truncated.to_string()
-        }
-    };
+    // 完整原样传给前端（markdown 由前端渲染，弹窗内滚动查看），不在 Rust 侧截断。
+    let notes = update.body.as_deref().unwrap_or("").trim().to_string();
 
     // 存起来，等用户在前端弹窗点「立即更新」后由 install_update 取用。
     *app.state::<PendingUpdate>().0.lock().unwrap() = Some(update);
@@ -160,15 +159,19 @@ async fn start_auto_check(app: tauri::AppHandle, channel: Option<String>) -> Res
 
 /// 前端弹窗点「立即更新」后调用：取出检查到的新版本，下载安装并重启。
 /// 下载进度通过 update://download-progress 事件广播给前端弹窗展示。
+/// channel 可选："stable"（默认）/ "preview"，与 check 用同一渠道。
 #[tauri::command]
-async fn install_update(app: tauri::AppHandle) -> Result<(), String> {
-    let update = app
-        .state::<PendingUpdate>()
-        .0
-        .lock()
-        .unwrap()
-        .take()
-        .ok_or_else(|| "没有待安装的更新".to_string())?;
+async fn install_update(app: tauri::AppHandle, channel: Option<String>) -> Result<(), String> {
+    let channel = channel.as_deref().unwrap_or("stable");
+    // 优先取 check_and_notify 暂存的 Update；若因极端时序（弹窗已显示但暂存被消费）
+    // 为空，现场重新检查兜底——宁可多查一次，也不能让用户「提示有更新却装不上」。
+    let update = match app.state::<PendingUpdate>().0.lock().unwrap().take() {
+        Some(u) => u,
+        None => match fetch_update(&app, channel).await? {
+            Some(u) => u,
+            None => return Err("当前已是最新版本，无需更新".to_string()),
+        },
+    };
 
     let app_emit = app.clone();
     // 进度回调：把下载进度广播给前端（弹窗进度条）。
