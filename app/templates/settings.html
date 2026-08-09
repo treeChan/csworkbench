@@ -3,7 +3,7 @@
 
 {% block content %}
 <div class="today-header">
-    <h1>⚙️ 设置</h1>
+    <h1><svg class="icon"><use href="{{ ICON_SPRITE }}#i-settings"/></svg> 设置</h1>
 </div>
 
 {% if error %}
@@ -15,7 +15,7 @@
 
 <!-- 常规（最前）：主题 + 每页条数 -->
 <div class="card settings-card">
-    <h3 class="card-title">📋 常规</h3>
+    <h3 class="card-title"><svg class="icon"><use href="{{ ICON_SPRITE }}#i-clipboard-list"/></svg>常规</h3>
     <form method="post" action="/settings/general">
         <div class="form-row">
             <label>主题</label>
@@ -48,7 +48,7 @@
 
 <!-- 数据与存储：路径 + 备份 + 恢复（都是对文件的操作，合并一块） -->
 <div class="card settings-card">
-    <h3 class="card-title">💾 数据与存储</h3>
+    <h3 class="card-title"><svg class="icon"><use href="{{ ICON_SPRITE }}#i-save"/></svg>数据与存储</h3>
     <form method="post" action="/settings/storage">
         <div class="form-row">
             <label>数据文件夹</label>
@@ -71,13 +71,13 @@
         </div>
         <div class="form-actions">
             <button type="submit" class="btn btn-primary">保存存储设置</button>
-            <button type="button" class="btn btn-outline" id="download-backup">⬇ 下载完整备份</button>
+            <button type="button" class="btn btn-outline" id="download-backup"><svg class="icon"><use href="{{ ICON_SPRITE }}#i-arrow-down"/></svg> 下载完整备份</button>
         </div>
     </form>
 
     <hr class="settings-divider">
 
-    <h4 class="card-subtitle">📥 恢复备份（一键导入 / 跨电脑迁移）</h4>
+    <h4 class="card-subtitle"><svg class="icon"><use href="{{ ICON_SPRITE }}#i-inbox"/></svg> 恢复备份（一键导入 / 跨电脑迁移）</h4>
     <form method="post" action="/settings/restore" enctype="multipart/form-data"
           onsubmit="return confirm('恢复将覆盖当前所有数据（数据库、上传文件、配置），且不可撤销。确定继续？');">
         <div class="form-row">
@@ -96,7 +96,7 @@
 
 <!-- 关于 -->
 <div class="card settings-card">
-    <h3 class="card-title">ℹ️ 关于</h3>
+    <h3 class="card-title"><svg class="icon"><use href="{{ ICON_SPRITE }}#i-info"/></svg>关于</h3>
     <table class="about-table">
         <tr><td>应用名称</td><td>{{ app_name }}</td></tr>
         <tr><td>版本</td><td><span class="about-version-cell">v{{ version }} <button type="button" class="btn btn-outline btn-sm update-check-btn">检查更新</button></span></td></tr>
@@ -129,7 +129,7 @@
                 {% if db_health.status == 'ok' %}
                 <span class="status-ok">● 正常（integrity_check 通过）</span>
                 {% else %}
-                <span class="status-error">⚠ 异常：{{ db_health.integrity }}</span>
+                <span class="status-error"><svg class="icon"><use href="{{ ICON_SPRITE }}#i-alert-triangle"/></svg> 异常：{{ db_health.integrity }}</span>
                 {% endif %}
             </td>
         </tr>

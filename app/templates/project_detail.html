@@ -10,13 +10,13 @@
 <div class="today-header">
     <h1>{{ project.name }}</h1>
     <div style="margin-left: auto; display: flex; gap: 8px;">
-        <a href="/projects/{{ project.id }}/edit" class="btn btn-outline">✏️ 编辑</a>
+        <a href="/projects/{{ project.id }}/edit" class="btn btn-outline"><svg class="icon"><use href="{{ ICON_SPRITE }}#i-pencil"/></svg> 编辑</a>
         <form method="post" action="/projects/{{ project.id }}/delete"
               onsubmit="return confirm('确认删除项目「{{ project.name }}」?\\n\\n项目下所有大目标 / 实验 / 指标 / 笔记 / 决策都会被删除，且无法恢复!')"
               style="display:inline;">
             <button type="submit" class="btn btn-outline"
                     style="color: var(--c-danger); border-color: var(--c-danger);">
-                🗑 删除项目
+                <svg class="icon"><use href="{{ ICON_SPRITE }}#i-trash-2"/></svg> 删除项目
             </button>
         </form>
     </div>
@@ -25,7 +25,7 @@
 <!-- ============= 流水线 stepper（可点击切换）============= -->
 <div class="card">
     <div class="card-header">
-        <h3>📈 当前研究阶段</h3>
+        <h3><svg class="icon"><use href="{{ ICON_SPRITE }}#i-chart-line"/></svg> 当前研究阶段</h3>
         <span style="font-size: 12px; color: var(--c-text-soft);">阶段 {{ project.current_stage }} / 5 · 点击切换</span>
     </div>
     <form method="post" action="/projects/{{ project.id }}/stage" id="stage-form">
@@ -47,7 +47,7 @@
         {% if project.current_stage < 5 %}
         → 下一步 <strong>{{ pipeline_stages[project.current_stage][1] }}</strong>
         {% else %}
-        · 全部完成 ✓
+        · 全部完成 <svg class="icon"><use href="{{ ICON_SPRITE }}#i-check"/></svg>
         {% endif %}
     </div>
 </div>
@@ -55,7 +55,7 @@
 <!-- ============= 大目标列表 ============= -->
 <div class="card">
     <div class="card-header">
-        <h3>🎯 大目标
+        <h3><svg class="icon"><use href="{{ ICON_SPRITE }}#i-target"/></svg> 大目标
             <small style="color: var(--c-text-soft); font-weight: normal;">
                 · {{ goal_cards|length }} 个目标
             </small>
@@ -68,7 +68,7 @@
         <div class="goal-card">
             <div class="goal-header">
                 <div class="goal-title">
-                    <span class="goal-icon">🎯</span>
+                    <span class="goal-icon"><svg class="icon"><use href="{{ ICON_SPRITE }}#i-target"/></svg></span>
                     <a href="/goals/{{ card.goal.id }}/edit" class="goal-name">{{ card.goal.name }}</a>
                 </div>
                 <div class="goal-meta">
@@ -80,7 +80,7 @@
                           onsubmit="return confirm('确认删除大目标「{{ card.goal.name }}」? 其下所有实验也会被删除!')"
                           style="display:inline; margin-left: 8px;">
                         <button type="submit" class="btn btn-outline"
-                                style="padding: 2px 8px; font-size: 11px;">🗑</button>
+                                style="padding: 2px 8px; font-size: 11px;"><svg class="icon"><use href="{{ ICON_SPRITE }}#i-trash-2"/></svg></button>
                     </form>
                 </div>
             </div>
@@ -135,7 +135,7 @@
                                       style="display:inline;">
                                     <button type="submit" class="btn btn-outline"
                                             title="删除实验"
-                                            style="padding: 2px 8px; font-size: 11px; color: var(--c-danger); border-color: var(--c-danger);">🗑</button>
+                                            style="padding: 2px 8px; font-size: 11px; color: var(--c-danger); border-color: var(--c-danger);"><svg class="icon"><use href="{{ ICON_SPRITE }}#i-trash-2"/></svg></button>
                                 </form>
                             </div>
                         </td>
@@ -171,7 +171,7 @@
 <!-- ============= 决策日志 ============= -->
 <div class="card">
     <div class="card-header">
-        <h3>⚖️ 决策日志</h3>
+        <h3><svg class="icon"><use href="{{ ICON_SPRITE }}#i-scale"/></svg> 决策日志</h3>
         <form method="post" action="/projects/{{ project.id }}/decisions" style="display: flex; gap: 6px;">
             <input type="text" name="content" placeholder="新增待跟进决策…" required
                    style="padding: 5px 10px; border: 1px solid var(--c-border); border-radius: var(--radius-md); font-size: 12px; min-width: 240px;">
@@ -190,7 +190,7 @@
                 <span class="badge badge-pending">待跟进</span>
             {% endif %}
             <form method="post" action="/decisions/{{ d.id }}/resolve" style="display:inline;">
-                <button type="submit" class="btn btn-outline" style="padding: 2px 8px; font-size: 11px;">✓</button>
+                <button type="submit" class="btn btn-outline" style="padding: 2px 8px; font-size: 11px;"><svg class="icon"><use href="{{ ICON_SPRITE }}#i-check"/></svg></button>
             </form>
             <form method="post" action="/decisions/{{ d.id }}/delete" style="display:inline;">
                 <button type="submit" class="btn btn-outline" style="padding: 2px 8px; font-size: 11px;">×</button>

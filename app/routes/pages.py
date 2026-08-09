@@ -48,7 +48,7 @@ TEMPLATES_DIR = BASE_DIR / "templates"
 
 # 静态资源缓存版本号：改 style.css / base.html 内嵌样式后 bump 此值，
 # 浏览器强制重新下载（对应 base.html 的 style.css?v={{ style_version }}）
-STYLE_VERSION = "20260808b"
+STYLE_VERSION = "20260809c"
 
 templates = Jinja2Templates(directory=str(TEMPLATES_DIR))
 
@@ -137,6 +137,8 @@ def render(
         "pipeline_stages": PIPELINE_STAGES,
         # 静态资源版本号：CSS/JS 改动时手动 bump，强制浏览器放弃缓存
         "style_version": STYLE_VERSION,
+        # 统一图标 sprite 引用（带 cache-busting，与 style.css 同一失效机制）
+        "ICON_SPRITE": "/static/icons.svg?v=" + STYLE_VERSION,
         **ctx_in,
         **kwargs,
     }

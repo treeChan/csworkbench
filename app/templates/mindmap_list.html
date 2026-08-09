@@ -4,14 +4,14 @@
 {% block content %}
 <div class="today-header">
     <div class="warroom-title">
-        <h1>🧠 思维导图</h1>
+        <h1><svg class="icon"><use href="{{ ICON_SPRITE }}#i-brain"/></svg> 思维导图</h1>
         <span class="today-date">共 {{ projects|length }} 个项目可进入画布</span>
     </div>
 </div>
 
 {% if not projects %}
 <div class="card" style="text-align: center; padding: 48px;">
-    <div style="font-size: 48px; margin-bottom: 12px;">🧠</div>
+    <div style="font-size: 48px; margin-bottom: 12px;"><svg class="icon"><use href="{{ ICON_SPRITE }}#i-brain"/></svg></div>
     <p style="color: var(--c-text-soft); font-size: 14px;">
         还没有项目，无法生成思维导图。<br>
         <a href="/projects/new" style="color: var(--c-primary); font-weight: 600;">创建第一个项目 →</a>
@@ -22,7 +22,7 @@
     {% for p in projects %}
     <div class="project-row">
         <a href="/projects/{{ p.id }}/mindmap" class="project-card">
-            <div class="project-icon">🧠</div>
+            <div class="project-icon"><svg class="icon"><use href="{{ ICON_SPRITE }}#i-brain"/></svg></div>
             <div class="project-meta">
                 <div class="project-name">{{ p.name }}</div>
                 <div class="project-desc">
@@ -33,7 +33,7 @@
                 </div>
             </div>
             <div class="project-stats">
-                <span>🎯 {{ experiment_counts[p.id] }} 个实验</span>
+                <span><svg class="icon"><use href="{{ ICON_SPRITE }}#i-target"/></svg> {{ experiment_counts[p.id] }} 个实验</span>
                 <span>·</span>
                 <span style="color: var(--c-text-faint);">更新于 {{ p.updated_at | fmt_dt }}</span>
             </div>
@@ -44,7 +44,7 @@
 {% endif %}
 
 <div class="card" style="margin-top: 16px;">
-    <h3 class="card-title">💡 思维导图能帮你做什么</h3>
+    <h3 class="card-title"><svg class="icon"><use href="{{ ICON_SPRITE }}#i-lightbulb"/></svg>思维导图能帮你做什么</h3>
     <ul style="font-size: 13px; color: var(--c-text-soft); padding-left: 20px; line-height: 1.8;">
         <li>自动从项目结构生成 <strong>项目 → 大目标 → 实验</strong> 的树状图，跟着项目数据自动同步</li>
         <li>在画布上自由添加矩形、椭圆、文本框、便签等形状，拖拽到任意位置</li>

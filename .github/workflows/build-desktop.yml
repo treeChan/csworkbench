@@ -122,3 +122,33 @@ jobs:
           includeUpdaterJson: true
           # 同时把安装包作为 workflow artifacts 留存（构建产物可见）
           uploadPlainBinary: true
+
+      # 预览渠道清理：tag 固定 → 同一 Release 每次构建都上传新安装包。
+      # 安装包文件名带版本号，旧版本文件不会被 tauri-action 清理，会越积越多
+      # （单 Release assets 上限 2GB）。构建成功后删掉所有「非当前版本号」的 assets，
+      # 只保留 updater 清单（latest.json 及其签名）与本次构建的安装包。
+      # 三平台并行都跑本步骤：删除的都是历史版本文件（同名 id 404 忽略），
+      # 当前版本文件含 VERSION 版本号 → 全部保留，不会误删。
+      - name: Clean stale preview assets
+        shell: bash
+        if: github.ref_name == 'preview'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          VER=$(cat VERSION)
+          REPO="$GITHUB_REPOSITORY"
+          gh api "repos/$REPO/releases/tags/preview" \
+            --jq '.assets[] | "\(.id)\t\(.name)"' 2>/dev/null | while IFS=$'\t' read -r id name; do
+            [ -z "$name" ] && continue
+            case "$name" in
+              latest.json*|*.sig)          # updater 清单与签名：永远保留
+                echo "keep updater asset: $name" ;;
+              *"$VER"*)                     # 本次构建版本（三平台）：保留
+                echo "keep current asset: $name" ;;
+              *)                            # 历史版本安装包：删除
+                echo "delete stale asset: $name"
+                gh api -X DELETE "repos/$REPO/releases/assets/$id" >/dev/null 2>&1 \
+                  || echo "  (ignore delete failure)"
+                ;;
+            esac
+          done

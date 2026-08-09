@@ -821,7 +821,7 @@ def search_all(
             {
                 "key": "projects",
                 "label": "项目",
-                "icon": "📁",
+                "icon": "i-folder",
                 "items": [
                     {
                         "title": p.name,
@@ -878,7 +878,7 @@ def search_all(
         for g in goals
     ]
     if items:
-        groups.append({"key": "exp_goal", "label": "实验与目标", "icon": "🧪", "items": items})
+        groups.append({"key": "exp_goal", "label": "实验与目标", "icon": "i-flask-conical", "items": items})
 
     # --- ③ 文件：original_name（快速）；+ description（全文）---
     a_where = models.Artifact.original_name.like(kw)
@@ -896,7 +896,7 @@ def search_all(
             {
                 "key": "artifacts",
                 "label": "文件",
-                "icon": "📦",
+                "icon": "i-package",
                 "items": [
                     {
                         "title": a.original_name,
@@ -952,7 +952,7 @@ def search_all(
     ]
     if items:
         groups.append(
-            {"key": "notes_decisions", "label": "笔记与决策", "icon": "📝", "items": items}
+            {"key": "notes_decisions", "label": "笔记与决策", "icon": "i-file-pen", "items": items}
         )
 
     # --- ⑤ 周复盘：title（快速）；+ 正文（全文）---
@@ -976,7 +976,7 @@ def search_all(
             {
                 "key": "reviews",
                 "label": "周复盘",
-                "icon": "📅",
+                "icon": "i-calendar",
                 "items": [
                     {
                         "title": r.title or f"第 {r.week_start_date.isocalendar()[1]} 周",

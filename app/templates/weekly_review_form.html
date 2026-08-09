@@ -10,7 +10,7 @@
 </div>
 
 <div class="today-header">
-    <h1>📝 {{ action }}周复盘</h1>
+    <h1><svg class="icon"><use href="{{ ICON_SPRITE }}#i-file-pen"/></svg> {{ action }}周复盘</h1>
     <a href="{{ '/review/' + review.id|string if review else '/review' }}"
        class="btn btn-outline" style="margin-left: auto;">← 返回</a>
 </div>
@@ -19,7 +19,7 @@
 
     {% if action == 'Create' and not reviews %}
     <div class="alert" style="background: var(--c-primary-bg); color: var(--c-primary); border-left: 3px solid var(--c-primary); margin-bottom: 16px; font-size: 13px;">
-        💡 起始日期默认填的是<strong>本周一</strong>。想写过去某一周也可以直接改日期。
+        <svg class="icon"><use href="{{ ICON_SPRITE }}#i-lightbulb"/></svg> 起始日期默认填的是<strong>本周一</strong>。想写过去某一周也可以直接改日期。
     </div>
     {% endif %}
 
@@ -43,25 +43,25 @@
         </div>
 
         <div class="form-row">
-            <label>🌟 本周高光 (Markdown)</label>
+            <label><svg class="icon"><use href="{{ ICON_SPRITE }}#i-star"/></svg> 本周高光 (Markdown)</label>
             <textarea name="highlights" rows="4"
                       placeholder="- 实验 A 终于跑通了&#10;- 论文里 figure 3 重画了&#10;- 周三跟导师讨论有新想法">{% if review %}{{ review.highlights }}{% endif %}</textarea>
         </div>
 
         <div class="form-row">
-            <label>🚧 卡点 / 待解决 (Markdown)</label>
+            <label><svg class="icon"><use href="{{ ICON_SPRITE }}#i-construction"/></svg> 卡点 / 待解决 (Markdown)</label>
             <textarea name="blockers" rows="4"
                       placeholder="- 仿真在边界处不稳定&#10;- 还差两组对比实验的数据">{% if review %}{{ review.blockers }}{% endif %}</textarea>
         </div>
 
         <div class="form-row">
-            <label>🎯 下周重点 (Markdown)</label>
+            <label><svg class="icon"><use href="{{ ICON_SPRITE }}#i-target"/></svg> 下周重点 (Markdown)</label>
             <textarea name="next_focus" rows="4"
                       placeholder="- 把 batch_size 调到 64 重跑&#10;- 整理 figure 给导师看">{% if review %}{{ review.next_focus }}{% endif %}</textarea>
         </div>
 
         <div class="form-row">
-            <label>📄 详细内容 (Markdown)</label>
+            <label><svg class="icon"><use href="{{ ICON_SPRITE }}#i-file-text"/></svg> 详细内容 (Markdown)</label>
             <textarea name="content" rows="8"
                       placeholder="详细的本周记录、随笔、技术笔记…">{% if review %}{{ review.content }}{% endif %}</textarea>
         </div>

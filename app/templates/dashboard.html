@@ -6,7 +6,7 @@
 <!-- ============= 页面标题 ============= -->
 <div class="today-header">
     <div class="warroom-title">
-        <h1>🛰️ 项目战情室</h1>
+        <h1><svg class="icon"><use href="{{ ICON_SPRITE }}#i-satellite"/></svg> 项目战情室</h1>
         <span class="today-date">{{ now().strftime('%Y年%m月%d日') }} · {{ ['星期一','星期二','星期三','星期四','星期五','星期六','星期日'][now().weekday()] }}</span>
     </div>
     <a href="/projects/new" class="btn btn-primary">+ 新建项目</a>
@@ -68,17 +68,17 @@
         <!-- 行内统计 -->
         <div class="card-stats">
             <div class="card-stat">
-                <span class="card-stat-icon">🎯</span>
+                <span class="card-stat-icon"><svg class="icon"><use href="{{ ICON_SPRITE }}#i-target"/></svg></span>
                 <span class="card-stat-val">{{ s.goal_count }}</span>
                 <span class="card-stat-label">大目标</span>
             </div>
             <div class="card-stat">
-                <span class="card-stat-icon">🧪</span>
+                <span class="card-stat-icon"><svg class="icon"><use href="{{ ICON_SPRITE }}#i-flask-conical"/></svg></span>
                 <span class="card-stat-val">{{ s.exp_count }}</span>
                 <span class="card-stat-label">实验</span>
             </div>
             <div class="card-stat {% if s.pending_count > 0 %}stat-warn{% endif %}">
-                <span class="card-stat-icon">⏰</span>
+                <span class="card-stat-icon"><svg class="icon"><use href="{{ ICON_SPRITE }}#i-alarm-clock"/></svg></span>
                 <span class="card-stat-val">{{ s.pending_count }}</span>
                 <span class="card-stat-label">待传结果</span>
             </div>
@@ -87,20 +87,20 @@
         <!-- 最近截止提示 -->
         {% if s.earliest_due %}
         <div class="warroom-card-foot">
-            📅 最近截止 <strong>{{ s.earliest_due.strftime('%m-%d') }}</strong>
+            <svg class="icon"><use href="{{ ICON_SPRITE }}#i-calendar"/></svg> 最近截止 <strong>{{ s.earliest_due.strftime('%m-%d') }}</strong>
             <span class="foot-muted"> · {{ s.next_due_exp_name }}</span>
         </div>
         {% elif s.pending_count > 0 %}
         <div class="warroom-card-foot foot-muted">
-            ⏰ 有待传结果的实验未设截止
+            <svg class="icon"><use href="{{ ICON_SPRITE }}#i-alarm-clock"/></svg> 有待传结果的实验未设截止
         </div>
         {% elif s.exp_count == 0 %}
         <div class="warroom-card-foot foot-muted">
-            🌱 尚未创建实验
+            <svg class="icon"><use href="{{ ICON_SPRITE }}#i-sprout"/></svg> 尚未创建实验
         </div>
         {% else %}
         <div class="warroom-card-foot foot-ok">
-            ✅ 所有实验均已出结果
+            <svg class="icon"><use href="{{ ICON_SPRITE }}#i-circle-check"/></svg> 所有实验均已出结果
         </div>
         {% endif %}
     </a>
@@ -108,7 +108,7 @@
 </div>
 {% else %}
 <div class="empty-state">
-    <div class="empty-icon">🛰️</div>
+    <div class="empty-icon"><svg class="icon"><use href="{{ ICON_SPRITE }}#i-satellite"/></svg></div>
     <h3>还没有任何项目</h3>
     <p>从新建一个研究项目开始 — 拆解大目标、跟踪实验、记录结果。</p>
     <a href="/projects/new" class="btn btn-primary">+ 新建项目</a>

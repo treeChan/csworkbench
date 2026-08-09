@@ -28,7 +28,7 @@
 <header class="topbar">
     <div class="topbar-left">
         <div class="project-switcher">
-            <span class="rocket">🚀</span>
+            <span class="rocket"><svg class="icon"><use href="{{ ICON_SPRITE }}#i-rocket"/></svg></span>
             <span class="brand">研究驾驶舱</span>
         </div>
         <select class="project-select" onchange="if(this.value) location.href=this.value">
@@ -47,7 +47,7 @@
 
     <div class="topbar-center">
         <form class="search-box" action="/search" method="get" role="search">
-            <span class="search-icon">🔍</span>
+            <span class="search-icon"><svg class="icon"><use href="{{ ICON_SPRITE }}#i-search"/></svg></span>
             <input type="search" id="top-search" name="q" placeholder="搜索项目、工况、结论或文件"
                    value="{{ q|default('') }}">
             <button type="submit" class="btn btn-outline btn-search">搜索</button>
@@ -62,16 +62,16 @@
                 + 快速创建 <span class="caret">▾</span>
             </button>
             <div class="quick-create-menu" id="quick-create-menu" hidden>
-                <a class="quick-create-item" href="/projects/new">📁 新建项目</a>
+                <a class="quick-create-item" href="/projects/new"><svg class="icon"><use href="{{ ICON_SPRITE }}#i-folder"/></svg>新建项目</a>
                 {% if active_project %}
-                <a class="quick-create-item" href="/projects/{{ active_project.id }}/goals/new">🎯 新建大目标</a>
-                <a class="quick-create-item" href="/projects/{{ active_project.id }}/experiments/new">🧪 新建实验</a>
-                <a class="quick-create-item" href="/review/new">📅 新建周复盘</a>
+                <a class="quick-create-item" href="/projects/{{ active_project.id }}/goals/new"><svg class="icon"><use href="{{ ICON_SPRITE }}#i-target"/></svg>新建大目标</a>
+                <a class="quick-create-item" href="/projects/{{ active_project.id }}/experiments/new"><svg class="icon"><use href="{{ ICON_SPRITE }}#i-flask-conical"/></svg>新建实验</a>
+                <a class="quick-create-item" href="/review/new"><svg class="icon"><use href="{{ ICON_SPRITE }}#i-calendar"/></svg>新建周复盘</a>
                 {% endif %}
             </div>
         </div>
-        <button class="icon-btn" id="theme-toggle" title="切换主题">🌙</button>
-        <a class="icon-btn" href="/settings" title="设置" aria-label="设置">⚙️</a>
+        <button class="icon-btn" id="theme-toggle" title="切换主题"><svg class="icon"><use href="{{ ICON_SPRITE }}#i-moon"/></svg></button>
+        <a class="icon-btn" href="/settings" title="设置" aria-label="设置"><svg class="icon"><use href="{{ ICON_SPRITE }}#i-settings"/></svg></a>
     </div>
 </header>
 
@@ -82,16 +82,16 @@
     <nav class="sidebar">
         <ul class="nav-list">
             <li class="nav-item {% if active_nav == 'today' %}active{% endif %}">
-                <a href="/"><span class="nav-icon">⏰</span> <span class="nav-label">今日</span></a>
+                <a href="/"><span class="nav-icon"><svg class="icon"><use href="{{ ICON_SPRITE }}#i-alarm-clock"/></svg></span> <span class="nav-label">今日</span></a>
             </li>
             <li class="nav-item {% if active_nav == 'projects' %}active{% endif %}">
-                <a href="/projects"><span class="nav-icon">📁</span> <span class="nav-label">项目</span></a>
+                <a href="/projects"><span class="nav-icon"><svg class="icon"><use href="{{ ICON_SPRITE }}#i-folder"/></svg></span> <span class="nav-label">项目</span></a>
             </li>
             <li class="nav-item {% if active_nav == 'mindmap' %}active{% endif %}">
-                <a href="/mindmap"><span class="nav-icon">🧠</span> <span class="nav-label">思维导图</span></a>
+                <a href="/mindmap"><span class="nav-icon"><svg class="icon"><use href="{{ ICON_SPRITE }}#i-brain"/></svg></span> <span class="nav-label">思维导图</span></a>
             </li>
             <li class="nav-item {% if active_nav == 'review' %}active{% endif %}">
-                <a href="/review"><span class="nav-icon">📅</span> <span class="nav-label">周复盘</span></a>
+                <a href="/review"><span class="nav-icon"><svg class="icon"><use href="{{ ICON_SPRITE }}#i-calendar"/></svg></span> <span class="nav-label">周复盘</span></a>
             </li>
         </ul>
     </nav>
@@ -109,19 +109,19 @@
     <aside class="rightbar">
         {% block rightbar %}
         <section class="card">
-            <h3 class="card-title">⚡ 快速记录</h3>
+            <h3 class="card-title"><svg class="icon"><use href="{{ ICON_SPRITE }}#i-zap"/></svg>快速记录</h3>
 
             {% if active_project %}
             <form method="post" action="/projects/{{ active_project.id }}/quick-records" id="quick-form">
                 <div class="quick-types">
                     <button type="button" class="quick-type active" data-type="task"
-                            onclick="selectQuickType(this)">📋 任务</button>
+                            onclick="selectQuickType(this)"><svg class="icon"><use href="{{ ICON_SPRITE }}#i-clipboard-list"/></svg> 任务</button>
                     <button type="button" class="quick-type" data-type="idea"
-                            onclick="selectQuickType(this)">💡 科研想法</button>
+                            onclick="selectQuickType(this)"><svg class="icon"><use href="{{ ICON_SPRITE }}#i-lightbulb"/></svg> 科研想法</button>
                     <button type="button" class="quick-type" data-type="simulation"
-                            onclick="selectQuickType(this)">⚠️ 仿真问题</button>
+                            onclick="selectQuickType(this)"><svg class="icon"><use href="{{ ICON_SPRITE }}#i-alert-triangle"/></svg> 仿真问题</button>
                     <button type="button" class="quick-type" data-type="revision"
-                            onclick="selectQuickType(this)">📝 论文修改点</button>
+                            onclick="selectQuickType(this)"><svg class="icon"><use href="{{ ICON_SPRITE }}#i-file-pen"/></svg> 论文修改点</button>
                 </div>
                 <input type="hidden" name="record_type" id="quick-record-type" value="task">
                 <textarea name="content" class="quick-input"
@@ -141,7 +141,7 @@
 
         {% if rightbar_decisions %}
         <section class="card">
-            <h3 class="card-title">⚖️ 未关闭决策</h3>
+            <h3 class="card-title"><svg class="icon"><use href="{{ ICON_SPRITE }}#i-scale"/></svg>未关闭决策</h3>
             <ul class="decision-list">
                 {% for d in rightbar_decisions %}
                 <li class="decision-item">
@@ -158,8 +158,8 @@
 
 <!-- =================== 底部状态栏 =================== -->
 <footer class="statusbar">
-    <span class="status-item">🚀 Workbench</span>
-    <span class="status-item" id="db-health-status" title="数据库完整性检测中…">● 数据库健康：检测中…</span>
+    <span class="status-item"><svg class="icon"><use href="{{ ICON_SPRITE }}#i-rocket"/></svg>Workbench</span>
+    <span class="status-item" id="db-health-status" title="数据库完整性检测中…"><svg class="icon status-db-icon"><use href="{{ ICON_SPRITE }}#i-shield-check"/></svg><span id="db-health-text">● 数据库健康：检测中…</span></span>
     <span class="status-item status-copyright">© 2026 <a href="https://github.com/treeChan/csworkbench" target="_blank" rel="noopener">treeChan &amp; JesseFather</a></span>
     <span class="status-right">
         <kbd>Ctrl K</kbd> 搜索 · <kbd>Ctrl N</kbd> 新建
@@ -172,7 +172,7 @@
      web 版无 __TAURI__ 时整个遮罩不渲染。 -->
 <div class="update-modal-backdrop" id="update-modal" hidden>
     <div class="update-modal" role="dialog" aria-modal="true" aria-labelledby="update-modal-title">
-        <div class="update-modal-icon">🚀</div>
+        <div class="update-modal-icon"><svg class="icon"><use href="{{ ICON_SPRITE }}#i-rocket"/></svg></div>
         <h3 class="update-modal-title" id="update-modal-title">发现新版本</h3>
         <div class="update-modal-version" id="update-modal-version"></div>
         <div class="update-modal-notes" id="update-modal-notes"></div>
@@ -290,8 +290,10 @@ function selectQuickType(btn) {
     }
 
     function updateThemeIcon() {
-        // 按钮展示「当前模式」：暗色显示 🌙，亮色显示 ☀️；title 提示点击后的动作
-        themeBtn.textContent = isDark() ? "🌙" : "☀️";
+        // 按钮展示「当前模式」：暗色显示月亮，亮色显示太阳；title 提示点击后的动作
+        themeBtn.innerHTML = isDark()
+            ? '<svg class="icon"><use href="{{ ICON_SPRITE }}#i-moon"/></svg>'
+            : '<svg class="icon"><use href="{{ ICON_SPRITE }}#i-sun"/></svg>';
         themeBtn.title = isDark() ? "切换到亮色" : "切换到暗色";
     }
 
@@ -364,27 +366,34 @@ function selectQuickType(btn) {
     var el = document.getElementById("db-health-status");
     if (!el) return;
 
+    // 图标元素 + 文本元素分离：JS 只改 use 的 href 和文本（● 保留在 ok/初始文本里）。
+    var healthIcon = el.querySelector(".status-db-icon use");
+    var healthText = document.getElementById("db-health-text");
+    function setHealth(ok, text, title) {
+        if (healthIcon) {
+            healthIcon.setAttribute(
+                "href",
+                ok ? "{{ ICON_SPRITE }}#i-shield-check" : "{{ ICON_SPRITE }}#i-alert-triangle"
+            );
+        }
+        if (healthText) healthText.textContent = text;
+        el.title = title || "";
+        el.classList.toggle("status-ok", ok);
+        el.classList.toggle("status-error", !ok);
+    }
+
     function poll() {
         fetch("/api/db-health", { cache: "no-store" })
             .then(function (r) { return r.json(); })
             .then(function (d) {
                 if (d.status === "ok") {
-                    el.textContent = "● 数据库健康：正常";
-                    el.classList.add("status-ok");
-                    el.classList.remove("status-error");
-                    el.title = "数据库完整性正常（integrity_check 通过）";
+                    setHealth(true, "● 数据库健康：正常", "数据库完整性正常（integrity_check 通过）");
                 } else {
-                    el.textContent = "⚠ 数据库异常";
-                    el.classList.add("status-error");
-                    el.classList.remove("status-ok");
-                    el.title = d.integrity || "完整性检查未通过";
+                    setHealth(false, "数据库异常", d.integrity || "完整性检查未通过");
                 }
             })
             .catch(function () {
-                el.textContent = "⚠ 数据库检测失败";
-                el.classList.add("status-error");
-                el.classList.remove("status-ok");
-                el.title = "无法连接 /api/db-health";
+                setHealth(false, "数据库检测失败", "无法连接 /api/db-health");
             });
     }
     poll();

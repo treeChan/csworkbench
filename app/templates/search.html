@@ -6,7 +6,7 @@
 <!-- ============= 页面标题 ============= -->
 <div class="today-header">
     <div class="warroom-title">
-        <h1>🔍 搜索{% if q %}：{{ q }}{% endif %}</h1>
+        <h1><svg class="icon"><use href="{{ ICON_SPRITE }}#i-search"/></svg> 搜索{% if q %}：{{ q }}{% endif %}</h1>
         <span class="today-date">
             {{ '全文模式' if fulltext else '快速模式' }}
             {% if not fulltext %} · 仅标题/名称，正文请切全文{% endif %}
@@ -16,23 +16,24 @@
     <a href="/search?q={{ q|urlencode }}&fulltext={% if fulltext %}0{% else %}1{% endif %}"
        class="btn {% if fulltext %}btn-outline{% else %}btn-primary{% endif %}"
        title="全文搜索额外匹配实验设计、笔记、文件描述、周复盘正文等字段">
-        {{ '✨ 全文搜索 ✓' if fulltext else '✨ 全文搜索' }}
+        <svg class="icon"><use href="{{ ICON_SPRITE }}#i-sparkles"/></svg> 全文搜索
+        {% if fulltext %} <svg class="icon"><use href="{{ ICON_SPRITE }}#i-check"/></svg>{% endif %}
     </a>
     {% endif %}
 </div>
 
 {% if not q %}
 <div class="empty-state">
-    <div class="empty-icon">🔍</div>
+    <div class="empty-icon"><svg class="icon"><use href="{{ ICON_SPRITE }}#i-search"/></svg></div>
     <h3>输入关键词开始搜索</h3>
-    <p>默认「快速搜索」只匹配标题 / 名称；点右上角「✨ 全文搜索」可搜索正文内容。</p>
+    <p>默认「快速搜索」只匹配标题 / 名称；点右上角「全文搜索」可搜索正文内容。</p>
 </div>
 
 {% elif total == 0 %}
 <div class="empty-state">
-    <div class="empty-icon">😕</div>
+    <div class="empty-icon"><svg class="icon"><use href="{{ ICON_SPRITE }}#i-face-frown"/></svg></div>
     <h3>没有找到匹配「{{ q }}」的内容</h3>
-    <p>试试切换「✨ 全文搜索」，或换个关键词。</p>
+    <p>试试切换「全文搜索」，或换个关键词。</p>
 </div>
 
 {% else %}
@@ -43,14 +44,14 @@
 
 {% for g in groups %}
 <div class="card">
-    <h3 class="card-title">{{ g.icon }} {{ g.label }}
+    <h3 class="card-title"><svg class="icon"><use href="{{ ICON_SPRITE }}#{{ g.icon|default('i-file-text') }}"/></svg>{{ g.label }}
         <small class="search-group-count">· {{ g["items"]|length }} 条</small>
     </h3>
     <ul class="search-results">
         {% for item in g["items"] %}
         <li class="search-result">
             {% if item.download %}
-            <a href="{{ item.download }}" class="search-download" title="下载文件">⬇ 下载</a>
+            <a href="{{ item.download }}" class="search-download" title="下载文件"><svg class="icon"><use href="{{ ICON_SPRITE }}#i-arrow-down"/></svg> 下载</a>
             {% endif %}
             <a href="{{ item.link }}" class="search-title">{{ item.title }}</a>
             {% if item.badge %}<span class="badge badge-status">{{ item.badge }}</span>{% endif %}

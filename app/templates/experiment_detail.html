@@ -6,14 +6,14 @@
     <a href="/projects">研究项目</a>
     <span class="sep">/</span>
     <a href="/projects/{{ project.id }}">{{ project.name }}</a>
-    {% if goal %}<span class="sep">/</span><a href="/goals/{{ goal.id }}/edit">🎯 {{ goal.name }}</a>{% endif %}
+    {% if goal %}<span class="sep">/</span><a href="/goals/{{ goal.id }}/edit"><svg class="icon"><use href="{{ ICON_SPRITE }}#i-target"/></svg> {{ goal.name }}</a>{% endif %}
     <span class="sep">/</span> {{ experiment.name }}
 </div>
 
 <!-- ============= 标题 ============= -->
 <div class="today-header">
     <h1>
-        🧪 {{ experiment.name }}
+        <svg class="icon"><use href="{{ ICON_SPRITE }}#i-flask-conical"/></svg> {{ experiment.name }}
         {% if experiment.result_summary %}
             <span class="dot dot-green" title="已上传结果"></span>
         {% else %}
@@ -22,12 +22,12 @@
     </h1>
     <div style="margin-left: auto; display: flex; gap: 8px;">
         <a href="/api/experiments/{{ experiment.id }}/export" class="btn btn-outline"
-           title="把实验的所有内容打成 ZIP 下载">📦 导出</a>
-        <a href="/experiments/{{ experiment.id }}/results" class="btn btn-primary">📤 上传结果</a>
-        <a href="/experiments/{{ experiment.id }}/edit" class="btn btn-outline">✏️ 编辑</a>
+           title="把实验的所有内容打成 ZIP 下载"><svg class="icon"><use href="{{ ICON_SPRITE }}#i-package"/></svg> 导出</a>
+        <a href="/experiments/{{ experiment.id }}/results" class="btn btn-primary"><svg class="icon"><use href="{{ ICON_SPRITE }}#i-upload"/></svg> 上传结果</a>
+        <a href="/experiments/{{ experiment.id }}/edit" class="btn btn-outline"><svg class="icon"><use href="{{ ICON_SPRITE }}#i-pencil"/></svg> 编辑</a>
         <form method="post" action="/experiments/{{ experiment.id }}/delete"
               onsubmit="return confirm('确认删除实验「{{ experiment.name }}」?')" style="display:inline;">
-            <button type="submit" class="btn btn-outline">🗑 删除</button>
+            <button type="submit" class="btn btn-outline"><svg class="icon"><use href="{{ ICON_SPRITE }}#i-trash-2"/></svg> 删除</button>
         </form>
     </div>
 </div>
@@ -62,7 +62,7 @@
 <!-- 实验设计区 -->
 <!-- ============================================================== -->
 <div class="section-divider">
-    <span class="section-icon">📐</span>
+    <span class="section-icon"><svg class="icon"><use href="{{ ICON_SPRITE }}#i-ruler"/></svg></span>
     <span class="section-title">实验设计</span>
     <span class="section-sub">想做什么 / 怎么做 / 用什么参数</span>
 </div>
@@ -70,7 +70,7 @@
 <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 14px;">
     <!-- 假设 / 目标 -->
     <div class="card">
-        <h3 class="card-title">🎯 假设 / 目标</h3>
+        <h3 class="card-title"><svg class="icon"><use href="{{ ICON_SPRITE }}#i-target"/></svg>假设 / 目标</h3>
         {% if experiment.hypothesis %}
             <div class="md">{{ experiment.hypothesis | markdown | safe }}</div>
         {% else %}
@@ -80,7 +80,7 @@
 
     <!-- 设计备注 -->
     <div class="card">
-        <h3 class="card-title">📝 设计备注</h3>
+        <h3 class="card-title"><svg class="icon"><use href="{{ ICON_SPRITE }}#i-file-pen"/></svg>设计备注</h3>
         {% if experiment.design_notes %}
             <div class="md">{{ experiment.design_notes | markdown | safe }}</div>
         {% else %}
@@ -91,7 +91,7 @@
 
 <!-- 配置文件 -->
 <div class="card">
-    <h3 class="card-title">⚙️ 超参数 / 配置 (Markdown)</h3>
+    <h3 class="card-title"><svg class="icon"><use href="{{ ICON_SPRITE }}#i-settings"/></svg>超参数 / 配置 (Markdown)</h3>
     {% if experiment.config_md %}
         <div class="md" style="background: var(--c-bg-soft); padding: 12px; border-radius: var(--radius-md);">{{ experiment.config_md | markdown | safe }}</div>
     {% else %}
@@ -103,7 +103,7 @@
 <!-- 实验结果区（只展示，编辑请去 /experiments/{id}/results） -->
 <!-- ============================================================== -->
 <div class="section-divider">
-    <span class="section-icon">📊</span>
+    <span class="section-icon"><svg class="icon"><use href="{{ ICON_SPRITE }}#i-chart-column"/></svg></span>
     <span class="section-title">实验结果</span>
     <span class="section-sub">
         {% if experiment.result_summary or metrics or notes %}
@@ -122,7 +122,7 @@
 
 <!-- 结果小结 -->
 <div class="card">
-    <h3 class="card-title">💡 结果小结</h3>
+    <h3 class="card-title"><svg class="icon"><use href="{{ ICON_SPRITE }}#i-lightbulb"/></svg>结果小结</h3>
     {% if experiment.result_summary %}
         <div class="md">{{ experiment.result_summary | markdown | safe }}</div>
     {% else %}
@@ -133,7 +133,7 @@
 <!-- 指标（表格，不再画曲线） -->
 <div class="card">
     <div class="card-header">
-        <h3>📈 指标记录 <small style="color: var(--c-text-soft); font-weight: normal;">({{ metrics|length }} 条)</small></h3>
+        <h3><svg class="icon"><use href="{{ ICON_SPRITE }}#i-chart-line"/></svg> 指标记录 <small style="color: var(--c-text-soft); font-weight: normal;">({{ metrics|length }} 条)</small></h3>
     </div>
     {% if metrics %}
     <table class="tbl">
@@ -167,16 +167,16 @@
 <!-- 文件与成果 -->
 <div class="card">
     <div class="card-header">
-        <h3>📎 文件与成果 <small style="color: var(--c-text-soft); font-weight: normal;">({{ artifacts|length }} 个)</small></h3>
+        <h3><svg class="icon"><use href="{{ ICON_SPRITE }}#i-paperclip"/></svg> 文件与成果 <small style="color: var(--c-text-soft); font-weight: normal;">({{ artifacts|length }} 个)</small></h3>
     </div>
     {% if artifacts %}
     <div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 10px;">
         {% for a in artifacts %}
         <div style="border: 1px solid var(--c-border); border-radius: var(--radius-md); padding: 10px; background: var(--c-bg-soft);">
             <div style="display: flex; align-items: center; gap: 6px;">
-                {% if a.kind == 'image' %}<span>🖼️</span>
-                {% elif a.kind == 'model' %}<span>🧠</span>
-                {% else %}<span>📄</span>{% endif %}
+                {% if a.kind == 'image' %}<span><svg class="icon"><use href="{{ ICON_SPRITE }}#i-image"/></svg></span>
+                {% elif a.kind == 'model' %}<span><svg class="icon"><use href="{{ ICON_SPRITE }}#i-brain"/></svg></span>
+                {% else %}<span><svg class="icon"><use href="{{ ICON_SPRITE }}#i-file-text"/></svg></span>{% endif %}
                 <a href="/api/artifacts/{{ a.id }}/download"
                    style="font-weight: 500; word-break: break-all;">{{ a.original_name }}</a>
             </div>
@@ -197,7 +197,7 @@
 <!-- 笔记 -->
 <div class="card">
     <div class="card-header">
-        <h3>📒 观察笔记 <small style="color: var(--c-text-soft); font-weight: normal;">({{ notes|length }} 条)</small></h3>
+        <h3><svg class="icon"><use href="{{ ICON_SPRITE }}#i-notebook"/></svg> 观察笔记 <small style="color: var(--c-text-soft); font-weight: normal;">({{ notes|length }} 条)</small></h3>
     </div>
 
     {% if notes %}

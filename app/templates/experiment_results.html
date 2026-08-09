@@ -6,17 +6,17 @@
     <a href="/projects">研究项目</a>
     <span class="sep">/</span>
     <a href="/projects/{{ project.id }}">{{ project.name }}</a>
-    {% if goal %}<span class="sep">/</span><a href="/goals/{{ goal.id }}/edit">🎯 {{ goal.name }}</a>{% endif %}
+    {% if goal %}<span class="sep">/</span><a href="/goals/{{ goal.id }}/edit"><svg class="icon"><use href="{{ ICON_SPRITE }}#i-target"/></svg> {{ goal.name }}</a>{% endif %}
     <span class="sep">/</span>
     <a href="/experiments/{{ experiment.id }}">{{ experiment.name }}</a>
     <span class="sep">/</span> 上传结果
 </div>
 
 <div class="today-header">
-    <h1>📤 上传结果 · {{ experiment.name }}</h1>
+    <h1><svg class="icon"><use href="{{ ICON_SPRITE }}#i-upload"/></svg> 上传结果 · {{ experiment.name }}</h1>
     <div style="margin-left: auto; display: flex; gap: 8px;">
         <a href="/api/experiments/{{ experiment.id }}/export" class="btn btn-outline"
-           title="把实验的所有内容打成 ZIP 下载">📦 导出</a>
+           title="把实验的所有内容打成 ZIP 下载"><svg class="icon"><use href="{{ ICON_SPRITE }}#i-package"/></svg> 导出</a>
         <a href="/experiments/{{ experiment.id }}" class="btn btn-outline">← 返回实验</a>
     </div>
 </div>
@@ -30,13 +30,13 @@
 
 <!-- ============= 结果小结 ============= -->
 <div class="card">
-    <h3 class="card-title">💡 结果小结</h3>
+    <h3 class="card-title"><svg class="icon"><use href="{{ ICON_SPRITE }}#i-lightbulb"/></svg>结果小结</h3>
     <form method="post" action="/experiments/{{ experiment.id }}/results">
         <textarea name="result_summary" rows="6"
                   placeholder="最终结论、关键数字、意外发现…"
                   style="width: 100%; padding: 8px 10px; border: 1px solid var(--c-border); border-radius: var(--radius-md); font-size: 13px;">{{ experiment.result_summary or '' }}</textarea>
         <div style="text-align: right; margin-top: 8px;">
-            <button type="submit" class="btn btn-primary">💾 保存小结</button>
+            <button type="submit" class="btn btn-primary"><svg class="icon"><use href="{{ ICON_SPRITE }}#i-save"/></svg> 保存小结</button>
         </div>
     </form>
 </div>
@@ -44,7 +44,7 @@
 <!-- ============= 指标 ============= -->
 <div class="card">
     <div class="card-header">
-        <h3>📈 指标记录 <small style="color: var(--c-text-soft); font-weight: normal;">({{ metrics|length }} 条)</small></h3>
+        <h3><svg class="icon"><use href="{{ ICON_SPRITE }}#i-chart-line"/></svg> 指标记录 <small style="color: var(--c-text-soft); font-weight: normal;">({{ metrics|length }} 条)</small></h3>
     </div>
     <p class="muted" style="font-size: 12px; margin: 0 0 10px;">
         每次记录一个数据点 —— 名称、数值、可选备注。<strong>不画曲线</strong>，纯记录。
@@ -100,7 +100,7 @@
 <!-- ============= 文件与成果 ============= -->
 <div class="card">
     <div class="card-header">
-        <h3>📎 文件与成果 <small style="color: var(--c-text-soft); font-weight: normal;">({{ artifacts|length }} 个)</small></h3>
+        <h3><svg class="icon"><use href="{{ ICON_SPRITE }}#i-paperclip"/></svg> 文件与成果 <small style="color: var(--c-text-soft); font-weight: normal;">({{ artifacts|length }} 个)</small></h3>
     </div>
     <p class="muted" style="font-size: 12px; margin: 0 0 10px;">
         上传结果图、示意图、模型权重（.pt / .pth / .onnx 等）。文件跟随所属实验 / 项目保留在本页及项目详情页。
@@ -113,7 +113,7 @@
                style="font-size: 12.5px;">
         <input type="text" name="description" placeholder="说明（可选，Markdown）"
                style="padding: 6px 10px; border: 1px solid var(--c-border); border-radius: var(--radius-md); font-size: 12.5px; flex: 1; min-width: 200px;">
-        <button type="submit" class="btn btn-primary" style="padding: 6px 14px; font-size: 12.5px;">⬆ 上传</button>
+        <button type="submit" class="btn btn-primary" style="padding: 6px 14px; font-size: 12.5px;"><svg class="icon"><use href="{{ ICON_SPRITE }}#i-upload"/></svg> 上传</button>
     </form>
 
     {% if artifacts %}
@@ -121,9 +121,9 @@
         {% for a in artifacts %}
         <div style="border: 1px solid var(--c-border); border-radius: var(--radius-md); padding: 10px; background: var(--c-bg-soft);">
             <div style="display: flex; align-items: center; gap: 6px; margin-bottom: 6px;">
-                {% if a.kind == 'image' %}<span>🖼️</span>
-                {% elif a.kind == 'model' %}<span>🧠</span>
-                {% else %}<span>📄</span>{% endif %}
+                {% if a.kind == 'image' %}<span><svg class="icon"><use href="{{ ICON_SPRITE }}#i-image"/></svg></span>
+                {% elif a.kind == 'model' %}<span><svg class="icon"><use href="{{ ICON_SPRITE }}#i-brain"/></svg></span>
+                {% else %}<span><svg class="icon"><use href="{{ ICON_SPRITE }}#i-file-text"/></svg></span>{% endif %}
                 <a href="/api/artifacts/{{ a.id }}/download"
                    style="font-weight: 500; word-break: break-all;">{{ a.original_name }}</a>
             </div>
@@ -152,7 +152,7 @@
 <!-- ============= 观察笔记 ============= -->
 <div class="card">
     <div class="card-header">
-        <h3>📒 观察笔记 <small style="color: var(--c-text-soft); font-weight: normal;">({{ notes|length }} 条)</small></h3>
+        <h3><svg class="icon"><use href="{{ ICON_SPRITE }}#i-notebook"/></svg> 观察笔记 <small style="color: var(--c-text-soft); font-weight: normal;">({{ notes|length }} 条)</small></h3>
     </div>
 
     <form method="post" action="/experiments/{{ experiment.id }}/notes"

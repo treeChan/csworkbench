@@ -4,7 +4,7 @@
 {% block content %}
 <div class="today-header">
     <div class="warroom-title">
-        <h1>📅 周复盘</h1>
+        <h1><svg class="icon"><use href="{{ ICON_SPRITE }}#i-calendar"/></svg> 周复盘</h1>
         <span class="today-date">共 {{ reviews|length }} 篇</span>
     </div>
     <a href="/review/new" class="btn btn-primary">+ 新建本周复盘</a>

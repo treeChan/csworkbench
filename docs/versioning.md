@@ -76,6 +76,11 @@ x.y.z-preview.MDHHNN
 3. CI 构建三平台安装包，发布到 `preview` 的 pre-release。
 4. 再次发预览版时，重复第 1~3 步（版本号换新，tag 仍叫 `preview`）。
 
+> **自动清理历史安装包**：构建成功后 CI 会自动删除 `preview` Release 中所有
+> 「非当前版本号」的安装包，只保留 `latest.json`（updater 清单）和本次构建的包，
+> 避免同一 Release 越积越大（单 Release assets 上限 2GB）。无需手动清理。
+> 仅对 `preview` tag 生效；正式版每次 tag 都是独立 Release，不受影响。
+
 > **为什么预览 tag 固定叫 `preview`**：桌面版检查更新的预览地址写死为
 > `https://github.com/treeChan/csworkbench/releases/download/preview/latest.json`，
 > 只有 tag 叫 `preview` 才能取到最新的 latest.json。版本号则在 latest.json 里，用户能看到完整的

@@ -11,13 +11,13 @@
 
 <div class="today-header">
     <h1>
-        📅 {{ review.title or ('第 ' + review.week_start_date.isocalendar()[1]|string + ' 周') }}
+        <svg class="icon"><use href="{{ ICON_SPRITE }}#i-calendar"/></svg> {{ review.title or ('第 ' + review.week_start_date.isocalendar()[1]|string + ' 周') }}
     </h1>
     <div style="margin-left: auto; display: flex; gap: 8px;">
-        <a href="/review/{{ review.id }}/edit" class="btn btn-outline">✏️ 编辑</a>
+        <a href="/review/{{ review.id }}/edit" class="btn btn-outline"><svg class="icon"><use href="{{ ICON_SPRITE }}#i-pencil"/></svg> 编辑</a>
         <form method="post" action="/review/{{ review.id }}/delete"
               onsubmit="return confirm('确定删除这篇周复盘？')" style="display:inline;">
-            <button type="submit" class="btn btn-outline">🗑 删除</button>
+            <button type="submit" class="btn btn-outline"><svg class="icon"><use href="{{ ICON_SPRITE }}#i-trash-2"/></svg> 删除</button>
         </form>
     </div>
 </div>
@@ -30,28 +30,28 @@
 
 {% if review.highlights %}
 <div class="card">
-    <h3 class="card-title">🌟 本周高光</h3>
+    <h3 class="card-title"><svg class="icon"><use href="{{ ICON_SPRITE }}#i-star"/></svg>本周高光</h3>
     <div class="md">{{ review.highlights | markdown | safe }}</div>
 </div>
 {% endif %}
 
 {% if review.blockers %}
 <div class="card">
-    <h3 class="card-title">🚧 卡点 / 待解决</h3>
+    <h3 class="card-title"><svg class="icon"><use href="{{ ICON_SPRITE }}#i-construction"/></svg>卡点 / 待解决</h3>
     <div class="md">{{ review.blockers | markdown | safe }}</div>
 </div>
 {% endif %}
 
 {% if review.next_focus %}
 <div class="card">
-    <h3 class="card-title">🎯 下周重点</h3>
+    <h3 class="card-title"><svg class="icon"><use href="{{ ICON_SPRITE }}#i-target"/></svg>下周重点</h3>
     <div class="md">{{ review.next_focus | markdown | safe }}</div>
 </div>
 {% endif %}
 
 {% if review.content %}
 <div class="card">
-    <h3 class="card-title">📄 详细内容</h3>
+    <h3 class="card-title"><svg class="icon"><use href="{{ ICON_SPRITE }}#i-file-text"/></svg>详细内容</h3>
     <div class="md">{{ review.content | markdown | safe }}</div>
 </div>
 {% endif %}
@@ -61,7 +61,7 @@
     <p style="color: var(--c-text-soft); font-size: 14px;">
         这篇复盘还是空的。
     </p>
-    <a href="/review/{{ review.id }}/edit" class="btn btn-primary">✏️ 去填写</a>
+    <a href="/review/{{ review.id }}/edit" class="btn btn-primary"><svg class="icon"><use href="{{ ICON_SPRITE }}#i-pencil"/></svg> 去填写</a>
 </div>
 {% endif %}
 

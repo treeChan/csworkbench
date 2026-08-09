@@ -19,12 +19,12 @@
     <div class="mm-topbar">
         <a href="/mindmap" class="mm-back" title="返回项目列表">←</a>
         <div class="mm-title">
-            <h2>🧠 {{ project.name }}</h2>
+            <h2><svg class="icon"><use href="{{ ICON_SPRITE }}#i-brain"/></svg> {{ project.name }}</h2>
             <small>
                 自动 <strong>{{ auto_count }}</strong> · 手动 <strong>{{ manual_count }}</strong>
             </small>
         </div>
-        <button id="mm-sync-btn" class="btn btn-outline" title="手动同步（项目数据变化时自动同步）">🔄 同步</button>
+        <button id="mm-sync-btn" class="btn btn-outline" title="手动同步（项目数据变化时自动同步）"><svg class="icon"><use href="{{ ICON_SPRITE }}#i-refresh-cw"/></svg> 同步</button>
         <span id="mm-save-state" class="mm-save-state">● 已保存</span>
     </div>
 

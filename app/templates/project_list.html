@@ -4,7 +4,7 @@
 {% block content %}
 <div class="today-header">
     <div class="warroom-title">
-        <h1>📁 研究项目</h1>
+        <h1><svg class="icon"><use href="{{ ICON_SPRITE }}#i-folder"/></svg> 研究项目</h1>
         <span class="today-date">共 {{ projects|length }} 个项目</span>
     </div>
     <a href="/projects/new" class="btn btn-primary">+ 新建项目</a>
@@ -21,7 +21,7 @@
     {% for p in projects %}
     <div class="project-row">
         <a href="/projects/{{ p.id }}" class="project-card">
-            <div class="project-icon">📁</div>
+            <div class="project-icon"><svg class="icon"><use href="{{ ICON_SPRITE }}#i-folder"/></svg></div>
             <div class="project-meta">
                 <div class="project-name">{{ p.name }}</div>
                 <div class="project-desc">
@@ -34,9 +34,9 @@
                 </div>
             </div>
             <div class="project-stats">
-                <span>📍 <strong>{{ pipeline_stages[p.current_stage - 1][1] }}</strong></span>
+                <span><svg class="icon"><use href="{{ ICON_SPRITE }}#i-map-pin"/></svg> <strong>{{ pipeline_stages[p.current_stage - 1][1] }}</strong></span>
                 <span>·</span>
-                <span>🧪 {{ experiment_counts[p.id] }} 个实验</span>
+                <span><svg class="icon"><use href="{{ ICON_SPRITE }}#i-flask-conical"/></svg> {{ experiment_counts[p.id] }} 个实验</span>
                 <span>·</span>
                 <span style="color: var(--c-text-faint);">更新于 {{ p.updated_at | fmt_dt }}</span>
             </div>
@@ -47,7 +47,7 @@
             <button type="submit" class="btn btn-outline"
                     title="删除项目"
                     style="padding: 6px 10px; font-size: 13px; color: var(--c-danger); border-color: var(--c-danger);">
-                🗑
+                <svg class="icon"><use href="{{ ICON_SPRITE }}#i-trash-2"/></svg>
             </button>
         </form>
     </div>

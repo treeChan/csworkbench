@@ -10,7 +10,7 @@
 </div>
 
 <div class="today-header">
-    <h1>🧪 {{ action }}实验</h1>
+    <h1><svg class="icon"><use href="{{ ICON_SPRITE }}#i-flask-conical"/></svg> {{ action }}实验</h1>
 </div>
 
 <div class="card" style="max-width: 880px;">
@@ -34,7 +34,7 @@
                 {% for g in goals %}
                 <option value="{{ g.id }}"
                         {% if experiment and experiment.goal_id == g.id %}selected{% endif %}>
-                    🎯 {{ g.name }}
+                    {{ g.name }}
                 </option>
                 {% endfor %}
             </select>
@@ -57,7 +57,7 @@
         </div>
 
         <!-- ============= 实验设计区 ============= -->
-        <div class="form-section-title">📐 实验设计</div>
+        <div class="form-section-title"><svg class="icon"><use href="{{ ICON_SPRITE }}#i-ruler"/></svg> 实验设计</div>
 
         <div class="form-row">
             <label>假设 / 目标 (Markdown)</label>
