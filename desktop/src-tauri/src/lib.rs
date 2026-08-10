@@ -209,9 +209,17 @@ async fn set_auto_check_enabled(app: tauri::AppHandle, enabled: bool) -> Result<
 #[tauri::command]
 async fn install_update(app: tauri::AppHandle, channel: Option<String>) -> Result<(), String> {
     let channel = channel.as_deref().unwrap_or("stable");
-    // 已有下载任务在跑：不允许并发启动第二个（点「重试」前 cancel 会清掉任务槽）。
-    if app.state::<UpdateTask>().0.lock().unwrap().is_some() {
-        return Err("已有更新任务正在进行".to_string());
+    // 清理已结束任务残留的句柄：spawn 与存槽之间的窗口内任务若瞬间完成，槽里会留下
+    // 一个 is_finished 的 JoinHandle，导致之后每次启动都被误判「已有任务正在进行」、
+    // 永久无法重装（只能靠 cancel_update 手动清槽）。这里先把已结束句柄清掉再判断。
+    {
+        let mut slot = app.state::<UpdateTask>().0.lock().unwrap();
+        if slot.as_ref().is_some_and(|h| h.is_finished()) {
+            *slot = None;
+        }
+        if slot.is_some() {
+            return Err("已有更新任务正在进行".to_string());
+        }
     }
     // 优先取 check_and_notify 暂存的 Update；若因极端时序（弹窗已显示但暂存被消费）
     // 为空，现场重新检查兜底——宁可多查一次，也不能让用户「提示有更新却装不上」。
@@ -228,6 +236,9 @@ async fn install_update(app: tauri::AppHandle, channel: Option<String>) -> Resul
     let app_emit = app.clone();
     // 下载+安装放进后台任务：取消 = abort 该任务（reqwest 连接随之中断）。
     let task = tauri::async_runtime::spawn(async move {
+        // 无进展超时判定依据：progress 每收到一个 chunk 就更新它。下载连续 30s
+        // 无任何网络活动即判定网络中断 → 停止下载并提示用户手动重试（不做自动重连）。
+        let last_activity = Arc::new(Mutex::new(Instant::now()));
         // 进度回调：累计已下载字节 → 广播给前端（弹窗进度条）。
         let emit = app_emit.clone();
         let mut downloaded: u64 = 0;
@@ -235,42 +246,66 @@ async fn install_update(app: tauri::AppHandle, channel: Option<String>) -> Resul
         let mut last_instant = Instant::now();
         let mut last_bytes: u64 = 0;
         let mut speed: f64 = 0.0;
-        let progress = move |chunk: usize, total: Option<u64>| {
-            downloaded += chunk as u64;
-            // 至少间隔 0.3s 才重算一次速度，避免小包抖动量出 0/极大值。
-            let now = Instant::now();
-            let dt = now.duration_since(last_instant).as_secs_f64();
-            if dt >= 0.3 {
-                let d = downloaded.saturating_sub(last_bytes) as f64;
-                speed = d / dt;
-                last_bytes = downloaded;
-                last_instant = now;
+        let progress = {
+            let last_activity = last_activity.clone();
+            move |chunk: usize, total: Option<u64>| {
+                *last_activity.lock().unwrap() = Instant::now();
+                downloaded += chunk as u64;
+                // 至少间隔 0.3s 才重算一次速度，避免小包抖动量出 0/极大值。
+                let now = Instant::now();
+                let dt = now.duration_since(last_instant).as_secs_f64();
+                if dt >= 0.3 {
+                    let d = downloaded.saturating_sub(last_bytes) as f64;
+                    speed = d / dt;
+                    last_bytes = downloaded;
+                    last_instant = now;
+                }
+                let (total, percent) = match total {
+                    Some(t) if t > 0 => (t, (downloaded as f32 / t as f32) * 100.0),
+                    _ => (0, 0.0),
+                };
+                let eta_secs = if total > downloaded && speed > 0.0 {
+                    Some(((total - downloaded) as f64 / speed).ceil() as u64)
+                } else {
+                    None
+                };
+                let _ = emit.emit(
+                    "update://download-progress",
+                    UpdateProgress {
+                        current: downloaded,
+                        total,
+                        percent,
+                        speed_bytes_per_sec: speed,
+                        eta_secs,
+                    },
+                );
             }
-            let (total, percent) = match total {
-                Some(t) if t > 0 => (t, (downloaded as f32 / t as f32) * 100.0),
-                _ => (0, 0.0),
-            };
-            let eta_secs = if total > downloaded && speed > 0.0 {
-                Some(((total - downloaded) as f64 / speed).ceil() as u64)
-            } else {
-                None
-            };
-            let _ = emit.emit(
-                "update://download-progress",
-                UpdateProgress {
-                    current: downloaded,
-                    total,
-                    percent,
-                    speed_bytes_per_sec: speed,
-                    eta_secs,
-                },
-            );
         };
-        // 下载（插件内部完成签名校验）。失败 → 广播错误 + 清空任务槽。
-        let bytes = match update.download(progress, || {}).await {
+        // 下载（插件内部完成签名校验）。
+        // 无进展超时：select 循环按「距上次进度的剩余时间」动态刷新 sleep——正常推进时
+        // sleep 随进度重置、永不触发；一旦 30s 无任何 chunk → 判定断网，drop future
+        // （reqwest 连接随之关闭），停止下载。进度持续但很慢的网络不会被误杀。
+        const STALL_TIMEOUT: Duration = Duration::from_secs(30);
+        let dl_fut = update.download(progress, || {});
+        tokio::pin!(dl_fut);
+        let dl_result: Result<Vec<u8>, String> = loop {
+            let elapsed = last_activity.lock().unwrap().elapsed();
+            if elapsed >= STALL_TIMEOUT {
+                break Err(
+                    "网络连接已中断，下载已停止。请检查网络后点击「重试」继续下载。".to_string(),
+                );
+            }
+            let wait = STALL_TIMEOUT - elapsed;
+            tokio::select! {
+                r = &mut dl_fut => break r.map_err(|e| format!("更新下载失败：{e}")),
+                _ = tokio::time::sleep(wait) => {}
+            }
+        };
+        // 失败 / 断网中断 → 广播错误 + 清空任务槽（前端据此恢复「重试」按钮）。
+        let bytes = match dl_result {
             Ok(b) => b,
-            Err(e) => {
-                let _ = app_emit.emit("update://download-error", format!("更新下载失败：{e}"));
+            Err(msg) => {
+                let _ = app_emit.emit("update://download-error", msg);
                 *app_emit.state::<UpdateTask>().0.lock().unwrap() = None;
                 return;
             }

@@ -811,6 +811,19 @@ button.pipeline-step:focus { outline: 2px solid var(--c-primary-light); outline-
     border-radius: 3px;
     margin-right: 4px;
 }
+/* 更新下载状态条：弹窗最小化时展示下载进度，可点击恢复弹窗 */
+.status-update-dl {
+    cursor: pointer;
+    max-width: 460px;
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+}
+.status-update-dl:hover { color: var(--c-primary); }
+.status-update-dl.status-error {
+    color: var(--c-danger);
+    font-weight: 600;
+}
 
 /* =================================================================
    面包屑
@@ -1371,6 +1384,13 @@ button.pipeline-step:focus { outline: 2px solid var(--c-primary-light); outline-
     margin: 2px 0 0;
     padding-top: 10px;
     border-top: 1px solid var(--c-border-soft);
+}
+/* 下载中提示文案：不要关闭软件、可最小化 */
+.update-minimize-hint {
+    margin: 8px 0 0;
+    font-size: var(--fs-xs);
+    color: var(--c-text-soft);
+    line-height: 1.6;
 }
 .about-version-cell .update-check-btn {
     margin: 0;

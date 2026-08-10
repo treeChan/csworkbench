@@ -160,6 +160,9 @@
 <footer class="statusbar">
     <span class="status-item"><svg class="icon"><use href="{{ ICON_SPRITE }}#i-rocket"/></svg>Workbench</span>
     <span class="status-item" id="db-health-status" title="数据库完整性检测中…"><svg class="icon status-db-icon"><use href="{{ ICON_SPRITE }}#i-shield-check"/></svg><span id="db-health-text">● 数据库健康：检测中…</span></span>
+    <span class="status-item status-update-dl" id="status-update-download" title="点击重新打开更新窗口" hidden>
+        <svg class="icon"><use href="{{ ICON_SPRITE }}#i-arrow-down"/></svg><span id="status-update-text">正在下载更新…</span>
+    </span>
     <span class="status-item status-copyright">© 2026 <a href="https://github.com/treeChan/csworkbench" target="_blank" rel="noopener">treeChan &amp; JesseFather</a></span>
     <span class="status-right">
         <kbd>Ctrl K</kbd> 搜索 · <kbd>Ctrl N</kbd> 新建
@@ -182,9 +185,13 @@
             </div>
             <div class="update-progress-text" id="update-modal-text">准备下载…</div>
         </div>
+        <p class="update-minimize-hint" id="update-modal-hint" hidden>
+            下载时请不要关闭软件，否则更新会中断。可点「最小化」收起到底部状态栏，随时点击状态栏恢复。
+        </p>
         <div class="update-modal-actions">
             <button type="button" class="btn btn-outline" id="update-modal-later">稍后</button>
             <button type="button" class="btn btn-outline" id="update-modal-cancel" hidden>取消</button>
+            <button type="button" class="btn btn-outline" id="update-modal-minimize" hidden>最小化</button>
             <button type="button" class="btn btn-primary" id="update-modal-now">立即更新</button>
         </div>
     </div>
@@ -424,7 +431,11 @@ function selectQuickType(btn) {
     var progText = document.getElementById("update-modal-text");
     var laterBtn = document.getElementById("update-modal-later");
     var cancelBtn = document.getElementById("update-modal-cancel");
+    var minimizeBtn = document.getElementById("update-modal-minimize");
+    var hintEl = document.getElementById("update-modal-hint");
     var nowBtn = document.getElementById("update-modal-now");
+    var statusDl = document.getElementById("status-update-download");
+    var statusDlText = document.getElementById("status-update-text");
     var downloading = false;         // 是否正在下载（决定按钮组形态）
 
     // 更新渠道：与设置页「加入预览计划」开关共用 localStorage 记录。
@@ -512,29 +523,53 @@ function selectQuickType(btn) {
     function closeModal() { modal.hidden = true; }
 
     // 弹窗按钮形态：
-    //   空闲/失败/安装中：显示 [稍后] + [立即更新/重试]，无 [取消]
-    //   下载中：          [稍后] 消失，[立即更新] 变为不可点的状态文本，出现 [取消]
+    //   空闲/失败/安装中：显示 [稍后] + [立即更新/重试]，无 [取消]/[最小化]
+    //   下载中：          [稍后] 消失，[立即更新] 变为不可点的状态文本，
+    //                    出现 [取消] + [最小化]（可收起到底部状态栏）
     function resetButtons() {
         downloading = false;
         if (laterBtn) { laterBtn.hidden = false; laterBtn.disabled = false; }
         if (nowBtn) { nowBtn.hidden = false; nowBtn.disabled = false; nowBtn.textContent = "立即更新"; }
         if (cancelBtn) cancelBtn.hidden = true;
+        if (minimizeBtn) minimizeBtn.hidden = true;
+        if (hintEl) hintEl.hidden = true;
     }
     function enterDownloading() {
         downloading = true;
         if (laterBtn) { laterBtn.hidden = true; laterBtn.disabled = true; }
         if (nowBtn) { nowBtn.hidden = true; nowBtn.disabled = true; }
         if (cancelBtn) cancelBtn.hidden = false;
+        if (minimizeBtn) minimizeBtn.hidden = false;
+        if (hintEl) hintEl.hidden = false;
     }
     function exitDownloadingToError() {
         downloading = false;
         if (laterBtn) { laterBtn.hidden = false; laterBtn.disabled = false; }
         if (nowBtn) { nowBtn.hidden = false; nowBtn.disabled = false; nowBtn.textContent = "重试"; }
         if (cancelBtn) cancelBtn.hidden = true;
+        if (minimizeBtn) minimizeBtn.hidden = true;
+        if (hintEl) hintEl.hidden = true;
     }
     function setProgress(pct, text) {
         if (progFill) progFill.style.width = pct + "%";
         if (progText) progText.textContent = text;
+    }
+
+    // —— 底部状态栏下载条：最小化弹窗后展示下载状态，点击恢复弹窗 ——
+    function showStatusbarDl(text, isError) {
+        if (!statusDl) return;
+        if (statusDlText) statusDlText.textContent = text;
+        if (isError) { statusDl.classList.add("status-error"); }
+        else { statusDl.classList.remove("status-error"); }
+        statusDl.hidden = false;
+    }
+    function hideStatusbarDl() {
+        if (statusDl) statusDl.hidden = true;
+    }
+    // 从状态栏重新打开弹窗：恢复下载中形态（进度由 progress 事件持续刷新）。
+    function restoreDownloading() {
+        enterDownloading();
+        progWrap.hidden = false;
     }
 
     // 监听 Rust 广播：发现新版本 → 弹窗
@@ -568,6 +603,7 @@ function selectQuickType(btn) {
         progWrap.hidden = false;
         var total = p.total || 0;
         var pct = total > 0 ? Math.round(p.percent || 0) : 0;
+        var text;
         if (total > 0) {
             var mb = (total / 1048576).toFixed(1);
             var cur = (p.current / 1048576).toFixed(1);
@@ -577,34 +613,76 @@ function selectQuickType(btn) {
             var eta = fmtEta(p.eta_secs);
             if (eta) extra.push(eta);
             var tail = extra.length ? "，" + extra.join("，") : "";
-            setProgress(pct, "正在下载更新… " + pct + "%（" + cur + " / " + mb + " MB" + tail + "）");
+            text = "正在下载更新… " + pct + "%（" + cur + " / " + mb + " MB" + tail + "）";
         } else {
-            setProgress(0, "正在下载更新…（等待服务器响应）");
+            text = "正在下载更新…（等待服务器响应）";
         }
+        setProgress(pct, text);
+        // 弹窗最小化时同步到底部状态栏（下载参数实时可见）
+        if (modal.hidden) { showStatusbarDl(text); }
+        else { hideStatusbarDl(); }
     });
-    // 下载完成 → 即将安装，进入不可取消阶段
+    // 下载完成 → 即将安装，进入不可取消阶段。
+    // 即使之前已最小化，也自动重新弹出弹窗：让用户知道即将安装并重启。
     listen("update://download-done", function () {
         if (downloading) { downloading = false; }
         if (laterBtn) { laterBtn.hidden = true; laterBtn.disabled = true; }
         if (nowBtn) { nowBtn.hidden = true; nowBtn.disabled = true; }
         if (cancelBtn) cancelBtn.hidden = true;
+        if (minimizeBtn) minimizeBtn.hidden = true;
+        if (hintEl) hintEl.hidden = true;
+        hideStatusbarDl();
+        modal.hidden = false;
         progWrap.hidden = false;
         setProgress(100, "下载完成，正在安装并重启…");
     });
-    // 下载失败 → 恢复按钮，可重试
+    // 下载失败 / 断网中断 → 恢复按钮可重试；最小化时状态栏条变红 + toast 通知
     listen("update://download-error", function (e) {
         var msg = e && e.payload ? e.payload : "下载失败";
+        shown = false;               // 失败后允许再次检查触发弹窗
         exitDownloadingToError();
         progWrap.hidden = false;
         setProgress(0, msg);
+        if (modal.hidden) {
+            showStatusbarDl(msg, true);
+            window.showToast(msg, "error");
+        } else {
+            hideStatusbarDl();
+        }
+    });
+    // 用户取消 → 复位全部状态，并允许再次检查触发弹窗（修复「取消后需跳页才正常」）
+    listen("update://download-cancelled", function () {
+        shown = false;
+        resetButtons();
+        if (progWrap) progWrap.hidden = true;
+        hideStatusbarDl();
+        window.showToast("更新已取消", "info");
     });
 
     // 按钮
     if (laterBtn) laterBtn.addEventListener("click", closeModal);
-    // 取消：abort 后台下载任务；如果任务已结束（比如下载瞬间完成）则静默无事。
+    // 取消：abort 后台下载任务。状态复位统一由 update://download-cancelled 事件完成；
+    // 仅当 invoke 被拒绝（Rust 侧异常）时前端兜底复位，避免与事件重复处理。
     if (cancelBtn) cancelBtn.addEventListener("click", function () {
-        invoke("cancel_update").catch(function () {});
         closeModal();
+        invoke("cancel_update").catch(function () {
+            shown = false;
+            resetButtons();
+            if (progWrap) progWrap.hidden = true;
+            hideStatusbarDl();
+            window.showToast("更新已取消", "info");
+        });
+    });
+    // 最小化：收起弹窗到底部状态栏，下载在后台继续，状态栏实时展示参数。
+    if (minimizeBtn) minimizeBtn.addEventListener("click", function () {
+        closeModal();
+        showStatusbarDl("正在下载更新…");
+    });
+    // 点击状态栏下载条 → 重新打开弹窗（下载中形态）。
+    if (statusDl) statusDl.addEventListener("click", function () {
+        hideStatusbarDl();
+        modal.hidden = false;
+        restoreDownloading();
     });
     if (nowBtn) nowBtn.addEventListener("click", function () {
         enterDownloading();
