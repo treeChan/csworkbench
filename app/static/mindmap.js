@@ -1073,20 +1073,9 @@
     }
 
     // ===================================================================
-    // 自动连接：选中唯一节点时, 再点另一个节点自动连边 (无需进连线模式)
-    // 拖锚点拖到目标节点上也是 connectEdge 入口, 两条路径共用 tryConnect()
+    // 连边交互：Figma 风格 — 普通点击只选中, 连边必须从锚点拖到目标节点
+    // (mindmap.js:1195-1254 的锚点拖拽连边是唯一入口)
     // ===================================================================
-    // 规则: 没按 shift, 之前只有 1 个 selectedNode, 点击的是另一个节点 → 自动连边
-    function tryAutoConnectOnClick(targetEl) {
-        if (!selectedNode) return false;
-        if (selectedNodes.size !== 1) return false;
-        if (selectedNode === targetEl) return false;  // 点自己不算
-        const sourceId = parseInt(selectedNode.getAttribute("data-id"), 10);
-        const targetId = parseInt(targetEl.getAttribute("data-id"), 10);
-        if (sourceId === targetId) return false;
-        createEdge(sourceId, targetId, true);
-        return true;
-    }
 
     // ---- 拖拽 ----
     function attachNodeHandlers(el) {
@@ -1096,24 +1085,11 @@
             const labelDiv = el.querySelector(".mm-label");
             if (labelDiv && labelDiv.classList.contains("editing")) return;
 
-            // 先判断这次点击要不要触发"自动连边": 之前唯一选中了一个节点,
-            // 当前点的是另一个节点 → 自动创建 source → target 边
-            // (Shift+点击 / 点击自己不算)
-            const willAutoConnect = !e.shiftKey
-                && selectedNode
-                && selectedNode !== el
-                && selectedNodes.size === 1;
-
             e.stopPropagation();
 
             if (e.shiftKey) {
                 // Shift+点击 → 多选切换
                 selectNode(el, { additive: true });
-            } else if (willAutoConnect) {
-                // 自动连边: 先连, 再让新点击的节点成为 selectedNode
-                // (这样连续点 3 个 = 连两条边, 而不是全连到第一个)
-                tryAutoConnectOnClick(el);
-                selectNode(el);
             } else if (selectedNodes.has(el)) {
                 // 点击已选中的唯一节点 → 取消选中, 隐藏锚点
                 if (selectedNodes.size === 1) {
@@ -1121,7 +1097,7 @@
                 }
                 // 多选状态下点击某个 → 保持当前多选 (Figma 行为)
             } else {
-                // 普通点击: 单选 (清空其他)
+                // 普通点击: 单选 (清空其他). 不会自动连边, 连边请拖锚点.
                 selectNode(el);
             }
 
