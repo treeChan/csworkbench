@@ -209,17 +209,9 @@ async fn set_auto_check_enabled(app: tauri::AppHandle, enabled: bool) -> Result<
 #[tauri::command]
 async fn install_update(app: tauri::AppHandle, channel: Option<String>) -> Result<(), String> {
     let channel = channel.as_deref().unwrap_or("stable");
-    // 清理已结束任务残留的句柄：spawn 与存槽之间的窗口内任务若瞬间完成，槽里会留下
-    // 一个 is_finished 的 JoinHandle，导致之后每次启动都被误判「已有任务正在进行」、
-    // 永久无法重装（只能靠 cancel_update 手动清槽）。这里先把已结束句柄清掉再判断。
-    {
-        let mut slot = app.state::<UpdateTask>().0.lock().unwrap();
-        if slot.as_ref().is_some_and(|h| h.is_finished()) {
-            *slot = None;
-        }
-        if slot.is_some() {
-            return Err("已有更新任务正在进行".to_string());
-        }
+    // 已有下载任务在跑：不允许并发启动第二个（点「重试」前 cancel 会清掉任务槽）。
+    if app.state::<UpdateTask>().0.lock().unwrap().is_some() {
+        return Err("已有更新任务正在进行".to_string());
     }
     // 优先取 check_and_notify 暂存的 Update；若因极端时序（弹窗已显示但暂存被消费）
     // 为空，现场重新检查兜底——宁可多查一次，也不能让用户「提示有更新却装不上」。
