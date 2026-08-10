@@ -299,6 +299,8 @@ class MindmapNodeBase(BaseModel):
     z_index: int = 0
     font_size: int = 13
     font_family: str = "system"
+    fill_color: str | None = None
+    font_color: str | None = None
 
 
 class MindmapNodeCreate(MindmapNodeBase):
@@ -319,6 +321,8 @@ class MindmapNodeUpdate(BaseModel):
     z_index: int | None = None
     font_size: int | None = None
     font_family: str | None = None
+    fill_color: str | None = None
+    font_color: str | None = None
 
 
 class MindmapNodePosition(BaseModel):
@@ -345,6 +349,8 @@ class MindmapNodeRead(MindmapNodeBase):
     font_size: int = 13
     font_family: str = "system"
     color: str | None = None
+    fill_color: str | None = None
+    font_color: str | None = None
     created_at: datetime
     updated_at: datetime
 

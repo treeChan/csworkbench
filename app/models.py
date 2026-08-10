@@ -517,6 +517,8 @@ class MindmapNode(Base):
     font_family: Mapped[str] = mapped_column(String(20), default="system")
 
     color: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    fill_color: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    font_color: Mapped[str | None] = mapped_column(String(20), nullable=True)
 
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
     updated_at: Mapped[datetime] = mapped_column(

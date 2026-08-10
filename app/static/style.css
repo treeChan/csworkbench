@@ -1782,6 +1782,19 @@ button.pipeline-step:focus { outline: 2px solid var(--c-primary-light); outline-
 .mm-link-mode .mm-node {
     cursor: crosshair !important;
 }
+/* ---- 颜色选择器 ---- */
+.mm-color-input {
+    width: 32px;
+    height: 28px;
+    padding: 0;
+    border: 1px solid var(--c-border, #d1d5db);
+    border-radius: 4px;
+    background: transparent;
+    cursor: pointer;
+}
+.mm-color-input::-webkit-color-swatch-wrapper { padding: 2px; }
+.mm-color-input::-webkit-color-swatch { border: none; border-radius: 2px; }
+
 /* link mode 提示条: 在画布顶部中央显示, 用户一眼能看到当前模式 */
 .mm-link-banner {
     position: absolute;

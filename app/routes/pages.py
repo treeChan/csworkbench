@@ -48,7 +48,7 @@ TEMPLATES_DIR = BASE_DIR / "templates"
 
 # 静态资源缓存版本号：改 style.css / base.html 内嵌样式后 bump 此值，
 # 浏览器强制重新下载（对应 base.html 的 style.css?v={{ style_version }}）
-STYLE_VERSION = "20260810c"
+STYLE_VERSION = "20260810d"
 
 templates = Jinja2Templates(directory=str(TEMPLATES_DIR))
 
@@ -1267,6 +1267,10 @@ def _render_mindmap_node(node) -> str:
     parent_attr = f' data-parent="{node.parent_id}"' if node.parent_id else ""
     z_attr = f' data-z="{node.z_index}"'
 
+    # 自定义填色 / 字色 (None 时 CSS 用默认, 这里不写属性保持简洁)
+    fill_attr = f' data-fill-color="{xml_escape(node.fill_color)}"' if node.fill_color else ""
+    font_attr = f' data-font-color="{xml_escape(node.font_color)}"' if node.font_color else ""
+
     g_open = (
         f'<g class="mm-node {kind_cls} {shape_cls}" '
         f'data-id="{safe_id}" '
@@ -1274,6 +1278,7 @@ def _render_mindmap_node(node) -> str:
         f'data-shape="{xml_escape(node.shape_type)}"'
         f'{parent_attr}{z_attr} '
         f'data-w="{w}" data-h="{h}" '
+        f'{fill_attr}{font_attr} '
         f'transform="translate({x},{y})">'
     )
 
@@ -1320,11 +1325,16 @@ def _render_mindmap_node(node) -> str:
     # 容错：未知值回退到 system（前端 CSS 也有兜底）
     from app.schemas import FONT_FAMILIES
     family_stack = FONT_FAMILIES.get(font_family, FONT_FAMILIES["system"])
+    # 自定义字色
+    font_color_style = ""
+    if getattr(node, "font_color", None):
+        from xml.sax.saxutils import escape as xml_escape
+        font_color_style = f";color:{xml_escape(node.font_color)}"
     text_svg = (
         f'<foreignObject x="0" y="0" width="{w}" height="{h}">'
         f'<div xmlns="http://www.w3.org/1999/xhtml" '
         f'class="mm-label" '
-        f'style="font-size:{font_size}px;font-family:{family_stack}">{safe_label}</div>'
+        f'style="font-size:{font_size}px;font-family:{family_stack}{font_color_style}">{safe_label}</div>'
         f'</foreignObject>'
     )
 

@@ -199,6 +199,33 @@ def _migrate_2026_08_05() -> None:
                 )
             )
 
+        # --- mindmap_nodes.fill_color (2026-08-10 思维导图填色/字色) ---
+        if not _column_exists(conn, "mindmap_nodes", "fill_color"):
+            conn.execute(
+                text(
+                    "ALTER TABLE mindmap_nodes "
+                    "ADD COLUMN fill_color VARCHAR(20)"
+                )
+            )
+
+        # --- mindmap_nodes.font_color ---
+        if not _column_exists(conn, "mindmap_nodes", "font_color"):
+            conn.execute(
+                text(
+                    "ALTER TABLE mindmap_nodes "
+                    "ADD COLUMN font_color VARCHAR(20)"
+                )
+            )
+
+
+def _migrate_2026_08_10() -> None:
+    """2026-08-10: 思维导图节点支持自定义填充色和字体色。
+    字段已由 _migrate_2026_08_05 (拆分扩展版) 加过, 这里只做兜底,
+    不再重复 ALTER (PRAGMA 检查时会自动跳过)。保留此函数以便未来追加字段。
+    """
+    # 字段实际添加已合并到 _migrate_2026_08_05 的尾部. 这里只放个 hook.
+    return
+
 
 def init_db() -> None:
     """创建所有表（幂等）并跑必要的迁移。"""
@@ -207,3 +234,4 @@ def init_db() -> None:
 
     Base.metadata.create_all(bind=engine)
     _migrate_2026_08_05()
+    _migrate_2026_08_10()

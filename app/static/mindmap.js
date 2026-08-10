@@ -199,6 +199,22 @@
         // 切换节点选中时, 边的选中取消 + 重新画锚点
         clearEdgeSelection();
         renderAnchors();
+        // 同步填色/字色 picker 显示当前节点的颜色
+        syncColorPickers(el);
+    }
+
+    function syncColorPickers(el) {
+        const fc = document.getElementById("mm-fill-color");
+        const ffc = document.getElementById("mm-font-color");
+        if (!el) {
+            if (fc) fc.value = "#ffffff";
+            if (ffc) ffc.value = "#1f2937";
+            return;
+        }
+        const fcVal = el.getAttribute("data-fill-color") || "#ffffff";
+        const ffcVal = el.getAttribute("data-font-color") || "#1f2937";
+        if (fc) fc.value = fcVal;
+        if (ffc) ffc.value = ffcVal;
     }
 
     function clearSelection() {
@@ -333,12 +349,18 @@
             "data-h": String(node.h),
             transform: `translate(${node.x},${node.y})`,
         };
+        if (node.fill_color) attrs["data-fill-color"] = node.fill_color;
+        if (node.font_color) attrs["data-font-color"] = node.font_color;
         if (node.parent_id != null) attrs["data-parent"] = String(node.parent_id);
         attrs["data-z"] = String(node.z_index != null ? node.z_index : 0);
         const g = svgEl("g", attrs);
 
         const shapeEl = buildShapeEl(node);
-        if (shapeEl) g.appendChild(shapeEl);
+        if (shapeEl) {
+            // 自定义填色: inline style 覆盖 CSS 默认 (sticky-* 那种预定义色)
+            if (node.fill_color) shapeEl.setAttribute("style", "fill:" + node.fill_color);
+            g.appendChild(shapeEl);
+        }
 
         // foreignObject + 内嵌 XHTML div（允许换行 + 内联编辑）
         const fo = svgEl("foreignObject", {
@@ -346,7 +368,10 @@
         });
         const labelDiv = document.createElementNS(NS_XHTML, "div");
         labelDiv.setAttribute("class", "mm-label");
-        if (node.font_size) labelDiv.setAttribute("style", "font-size:" + node.font_size + "px");
+        const labelStyleParts = [];
+        if (node.font_size) labelStyleParts.push("font-size:" + node.font_size + "px");
+        if (node.font_color) labelStyleParts.push("color:" + node.font_color);
+        if (labelStyleParts.length) labelDiv.setAttribute("style", labelStyleParts.join(";"));
         labelDiv.textContent = node.label || "";
         fo.appendChild(labelDiv);
         g.appendChild(fo);
@@ -930,6 +955,18 @@
                     if (el) el.setAttribute("transform", `translate(${p.x},${p.y})`);
                 });
                 redrawAllManualEdges();
+            } else if (cmd.type === "bulk-color") {
+                const list = useBefore ? cmd.before : cmd.after;
+                const prop = cmd.prop;
+                for (const item of list) {
+                    const body = {};
+                    body[prop === "fill" ? "fill_color" : "font_color"] = item.value || null;
+                    await api("/api/mindmap/nodes/" + item.id, {
+                        method: "PATCH", body: body,
+                    });
+                    const el = $node(item.id);
+                    if (el) applyNodeColor(el, prop, item.value);
+                }
             } else if (cmd.type === "add-edge") {
                 if (useBefore) {
                     await api("/api/mindmap/edges/" + cmd.edge.id, { method: "DELETE" });
@@ -1584,6 +1621,80 @@
         });
     }
 
+    // ---- 填色 / 字色 ----
+    function applyColorToSelection(prop, value) {
+        if (selectedNodes.size === 0) {
+            showToast("请先选中一个节点", "error");
+            return;
+        }
+        const before = [];
+        const after = [];
+        const ids = [];
+        selectedNodes.forEach(function (el) {
+            const id = parseInt(el.getAttribute("data-id"), 10);
+            const prev = el.getAttribute(prop === "fill" ? "data-fill-color" : "data-font-color") || null;
+            before.push({ id: id, value: prev });
+            ids.push(id);
+            // 立即更新 DOM (视觉)
+            applyNodeColor(el, prop, value);
+            after.push({ id: id, value: value });
+        });
+        pushCommand({ type: "bulk-color", prop: prop, before: before, after: after });
+        // 持久化
+        const payload = {};
+        payload[prop === "fill" ? "fill_color" : "font_color"] = value;
+        ids.forEach(function (id) {
+            patchNode(id, payload, { recordUndo: false });
+        });
+    }
+
+    function applyNodeColor(el, prop, value) {
+        if (value === null || value === undefined) {
+            // 清掉自定义
+            if (prop === "fill") {
+                el.removeAttribute("data-fill-color");
+                const shape = el.querySelector(".mm-shape");
+                if (shape) shape.removeAttribute("style");
+            } else {
+                el.removeAttribute("data-font-color");
+                const lbl = el.querySelector(".mm-label");
+                if (lbl) {
+                    const s = (lbl.getAttribute("style") || "").replace(/color:[^;]*;?/g, "").trim();
+                    if (s) lbl.setAttribute("style", s);
+                    else lbl.removeAttribute("style");
+                }
+            }
+            return;
+        }
+        if (prop === "fill") {
+            el.setAttribute("data-fill-color", value);
+            const shape = el.querySelector(".mm-shape");
+            if (shape) shape.setAttribute("style", "fill:" + value);
+        } else {
+            el.setAttribute("data-font-color", value);
+            const lbl = el.querySelector(".mm-label");
+            if (lbl) {
+                const cur = (lbl.getAttribute("style") || "");
+                const without = cur.replace(/color:[^;]*;?/g, "").trim();
+                const next = without ? without + ";color:" + value : "color:" + value;
+                lbl.setAttribute("style", next);
+            }
+        }
+    }
+
+    const fillColorInput = document.getElementById("mm-fill-color");
+    if (fillColorInput) {
+        fillColorInput.addEventListener("input", function () {
+            applyColorToSelection("fill", fillColorInput.value);
+        });
+    }
+    const fontColorInput = document.getElementById("mm-font-color");
+    if (fontColorInput) {
+        fontColorInput.addEventListener("input", function () {
+            applyColorToSelection("font", fontColorInput.value);
+        });
+    }
+
     // ---- 字号调整 ----
     // 选中节点 → 调整它的 font_size；无选中 → 提示
     // +2 / -2 / 0(=默认 13)
@@ -1864,14 +1975,21 @@
                 const y = m ? parseFloat(m[2]) : 0;
                 const w = parseFloat(el.getAttribute("data-w") || "120");
                 const h = parseFloat(el.getAttribute("data-h") || "60");
-                const shapeEl = el.querySelector(".mm-shape");
-                const computed = shapeEl ? window.getComputedStyle(shapeEl) : null;
-                const fill = computed ? computed.fill : "#ffffff";
-                const stroke = computed ? computed.stroke : "#d1d5db";
-                // 标签: 取 foreignObject 里的 .mm-label textContent
+                // 颜色: 用存储的 data-fill-color / data-font-color, 避免依赖 getComputedStyle
+                // (Image → Canvas 路径不解析 CSS 变量, 之前太黑的根因)
+                const kind = el.getAttribute("data-kind");
+                const shape = el.getAttribute("data-shape");
+                const fillColor = el.getAttribute("data-fill-color")
+                    || (kind === "auto" ? "#f3e8ff"
+                        : shape && shape.indexOf("sticky-") === 0 ? null  // sticky 用预定义
+                        : "#ffffff");
+                const fontColor = el.getAttribute("data-font-color") || "#1f2937";
+                // stroke 按 kind / shape 给默认, 用户没单独改过 stroke 就用这个
+                const stroke = (kind === "auto") ? "#7C3AED" : "#7C3AED";
+                // 标签
                 const lblEl = el.querySelector(".mm-label");
                 let label = lblEl ? (lblEl.textContent || "") : "";
-                // 内联 style 上的 font-size (活动编辑) 优先
+                // fontSize: 内联 style 上的优先
                 let fontSize = parseInt(el.getAttribute("data-font-size") || "13", 10);
                 if (lblEl) {
                     const inline = (lblEl.getAttribute("style") || "").match(/font-size:\s*(\d+)/);
@@ -1881,14 +1999,15 @@
                 const parentId = el.getAttribute("data-parent");
                 nodeList.push({
                     id: parseInt(el.getAttribute("data-id"), 10),
-                    kind: el.getAttribute("data-kind"),
-                    shape: el.getAttribute("data-shape"),
+                    kind: kind,
+                    shape: shape,
                     x: x, y: y, w: w, h: h,
                     label: label,
                     fontSize: fontSize,
                     fontFamily: fontFamily,
-                    fill: fill,
-                    stroke: stroke,
+                    fillColor: fillColor,
+                    fontColor: fontColor,
+                    strokeColor: stroke,
                     parentId: parentId ? parseInt(parentId, 10) : null,
                 });
             });
@@ -1941,14 +2060,20 @@
                 + 'viewBox="' + minX + ' ' + minY + ' ' + vbW + ' ' + vbH + '" '
                 + 'width="' + Math.ceil(vbW * scale) + '" height="' + Math.ceil(vbH * scale) + '">');
             // 箭头 marker
-            parts.push('<defs><marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 z" fill="#7C3AED"/></marker></defs>');
+            parts.push('<defs><marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto"><path d="M 0 0 L 10 5 L 0 10 z" fill="#7C3AED"/></marker></defs>');
+            // 白色背景: Image → Canvas 路径不会自动铺白, 先铺一块保证对比
+            parts.push('<rect x="' + minX + '" y="' + minY + '" width="' + vbW + '" height="' + vbH + '" fill="#ffffff"/>');
 
             // 5) 边 (auto 在底层, manual 在上层)
             edgeList.forEach(function (e) {
-                const sx = e.source.x + e.source.w, sy = e.source.y + e.source.h / 2;
-                const tx = e.target.x, ty = e.target.y + e.target.h / 2;
-                const mid = (sx + tx) / 2;
-                const d = "M " + sx + "," + sy + " C " + mid + "," + sy + " " + mid + "," + ty + " " + tx + "," + ty;
+                const anchors = edgeAnchors(
+                    e.source.x, e.source.y, e.source.w, e.source.h,
+                    e.target.x, e.target.y, e.target.w, e.target.h,
+                );
+                const mid = (anchors.x1 + anchors.x2) / 2;
+                const d = "M " + anchors.x1 + "," + anchors.y1
+                    + " C " + mid + "," + anchors.y1 + " " + mid + "," + anchors.y2
+                    + " " + anchors.x2 + "," + anchors.y2;
                 if (e.manual) {
                     parts.push('<path d="' + d + '" stroke="#7C3AED" stroke-width="2" fill="none" marker-end="url(#arrow)"/>');
                 } else {
@@ -1960,25 +2085,52 @@
             function escXml(s) {
                 return String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
             }
+            // sticky 默认填色 (Image 路径下不读 CSS 类, 单独给值)
+            const STICKY_FILLS = {
+                "sticky-yellow": "#fff4a3",
+                "sticky-pink":   "#ffd6e0",
+                "sticky-blue":   "#cfe6ff",
+            };
+            const STICKY_STROKES = {
+                "sticky-yellow": "#b58a00",
+                "sticky-pink":   "#b5506b",
+                "sticky-blue":   "#4a78a8",
+            };
             nodeList.forEach(function (n) {
                 const w = n.w, h = n.h;
+                // 计算最终填色/描边 (sticky 用预定义, text 框不画形状)
+                let fill = n.fillColor;
+                let stroke = n.strokeColor;
+                if (n.shape && n.shape.indexOf("sticky-") === 0) {
+                    fill = fill || STICKY_FILLS[n.shape] || "#fff4a3";
+                    stroke = stroke || STICKY_STROKES[n.shape] || "#7C3AED";
+                } else if (n.shape === "text") {
+                    fill = "none";
+                    stroke = "none";
+                } else {
+                    fill = fill || "#ffffff";
+                    stroke = stroke || "#7C3AED";
+                }
+                const fc = n.fontColor || "#1f2937";
                 parts.push('<g transform="translate(' + n.x + ',' + n.y + ')">');
                 // 形状
                 if (n.shape === "ellipse") {
-                    parts.push('<ellipse cx="' + w/2 + '" cy="' + h/2 + '" rx="' + w/2 + '" ry="' + h/2 + '" stroke="' + n.stroke + '" stroke-width="1.5" fill="' + n.fill + '"/>');
+                    parts.push('<ellipse cx="' + w/2 + '" cy="' + h/2 + '" rx="' + w/2 + '" ry="' + h/2 + '" stroke="' + stroke + '" stroke-width="1.5" fill="' + fill + '"/>');
                 } else if (n.shape === "diamond") {
-                    parts.push('<polygon points="' + w/2 + ',0 ' + w + ',' + h/2 + ' ' + w/2 + ',' + h + ' 0,' + h/2 + '" stroke="' + n.stroke + '" stroke-width="1.5" fill="' + n.fill + '"/>');
+                    parts.push('<polygon points="' + w/2 + ',0 ' + w + ',' + h/2 + ' ' + w/2 + ',' + h + ' 0,' + h/2 + '" stroke="' + stroke + '" stroke-width="1.5" fill="' + fill + '"/>');
                 } else if (n.shape === "hexagon") {
                     const cut = Math.min(20, w / 4);
-                    parts.push('<polygon points="' + cut + ',0 ' + (w-cut) + ',0 ' + w + ',' + h/2 + ' ' + (w-cut) + ',' + h + ' ' + cut + ',' + h + ' 0,' + h/2 + '" stroke="' + n.stroke + '" stroke-width="1.5" fill="' + n.fill + '"/>');
+                    parts.push('<polygon points="' + cut + ',0 ' + (w-cut) + ',0 ' + w + ',' + h/2 + ' ' + (w-cut) + ',' + h + ' ' + cut + ',' + h + ' 0,' + h/2 + '" stroke="' + stroke + '" stroke-width="1.5" fill="' + fill + '"/>');
                 } else if (n.shape === "arrow") {
-                    parts.push('<polygon points="0,' + h*0.3 + ' ' + w*0.7 + ',' + h*0.3 + ' ' + w*0.7 + ',0 ' + w + ',' + h/2 + ' ' + w*0.7 + ',' + h + ' ' + w*0.7 + ',' + h*0.7 + ' 0,' + h*0.7 + '" stroke="' + n.stroke + '" stroke-width="1.5" fill="' + n.fill + '"/>');
+                    parts.push('<polygon points="0,' + h*0.3 + ' ' + w*0.7 + ',' + h*0.3 + ' ' + w*0.7 + ',0 ' + w + ',' + h/2 + ' ' + w*0.7 + ',' + h + ' ' + w*0.7 + ',' + h*0.7 + ' 0,' + h*0.7 + '" stroke="' + stroke + '" stroke-width="1.5" fill="' + fill + '"/>');
+                } else if (n.shape === "text") {
+                    // text 形状: 无背景, 只画文字
                 } else {
-                    // rect / rounded / sticky-* / text
+                    // rect / rounded / sticky-*
                     let rx = "4";
                     if (n.shape === "rounded") rx = "12";
                     else if (n.shape && n.shape.indexOf("sticky-") === 0) rx = "6";
-                    parts.push('<rect width="' + w + '" height="' + h + '" rx="' + rx + '" stroke="' + n.stroke + '" stroke-width="1.5" fill="' + n.fill + '"/>');
+                    parts.push('<rect width="' + w + '" height="' + h + '" rx="' + rx + '" stroke="' + stroke + '" stroke-width="1.5" fill="' + fill + '"/>');
                 }
                 // 文字: 多行拆 tspan, 居中
                 const rawLines = (n.label || "").split(/\r?\n/);
@@ -1990,7 +2142,7 @@
                 // 首行 y: 垂直居中起点 (dominant-baseline 在 Chrome canvas 里支持度不一, 直接算 y)
                 let startY = (h - totalH) / 2 + n.fontSize * 0.9;
                 // family 必须 XML 转义 (含双引号会破坏 font-family="..." 边界)
-                parts.push('<text x="' + (w/2) + '" y="' + startY + '" text-anchor="middle" font-family="' + escXml(family) + '" font-size="' + n.fontSize + '" fill="#1f2937">');
+                parts.push('<text x="' + (w/2) + '" y="' + startY + '" text-anchor="middle" font-family="' + escXml(family) + '" font-size="' + n.fontSize + '" fill="' + fc + '">');
                 safeLines.forEach(function (line, idx) {
                     const dy = idx === 0 ? 0 : lineHeight;
                     parts.push('<tspan x="' + (w/2) + '" dy="' + dy + '">' + escXml(line) + '</tspan>');
@@ -2034,12 +2186,13 @@
                     setSaveState("saved");
                 }, "image/png");
             };
-            img.onerror = function () {
+            img.onerror = function (ev) {
                 URL.revokeObjectURL(url);
                 // 输出 SVG 字符串到 console + 暴露到 window, 方便调试
                 window.__lastExportError = svgString;
-                console.error("PNG export failed. SVG string saved to window.__lastExportError (length=" + svgString.length + ")");
-                showToast("导出失败：SVG 转图片失败。SVG 已存到 window.__lastExportError 控制台可看", "error");
+                const head = svgString.slice(0, 300).replace(/\s+/g, " ");
+                console.error("PNG export failed. SVG head (first 300 chars):", head);
+                showToast("导出失败：SVG 转图片失败。SVG 已存到 window.__lastExportError, 控制台可看开头", "error");
                 setSaveState("error");
             };
             img.src = url;

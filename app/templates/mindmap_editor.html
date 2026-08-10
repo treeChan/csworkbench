@@ -79,6 +79,18 @@
         <button id="mm-link-btn" class="mm-tb-btn" title="进入连线模式 (L)：再点两个节点完成连线">🔗 连线</button>
 
         <div class="mm-toolbar-sep"></div>
+        <div class="mm-toolbar-group">
+            <span class="mm-toolbar-label">填色</span>
+            <input type="color" id="mm-fill-color" class="mm-color-input" value="#ffffff"
+                   title="节点填充色（应用到选中节点）"/>
+        </div>
+        <div class="mm-toolbar-group">
+            <span class="mm-toolbar-label">字色</span>
+            <input type="color" id="mm-font-color" class="mm-color-input" value="#1f2937"
+                   title="节点字体颜色（应用到选中节点）"/>
+        </div>
+
+        <div class="mm-toolbar-sep"></div>
         <button id="mm-export-btn" class="mm-tb-btn" title="导出整张画布为 PNG 图片">📷 导出 PNG</button>
 
         <div class="mm-toolbar-sep"></div>
@@ -161,7 +173,7 @@ window.MM_BOOT = {
     syncDiff: {{ sync_diff | tojson }}
 };
 </script>
-<script src="/static/mindmap.js?v=1786364282" defer></script>
+<script src="/static/mindmap.js?v=1786400001" defer></script>
 {% endblock %}
 
 {% block scripts %}{% endblock %}
