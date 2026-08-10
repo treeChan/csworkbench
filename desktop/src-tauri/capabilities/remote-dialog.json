@@ -9,6 +9,8 @@
     "dialog:allow-open",
     "allow-check-for-updates",
     "allow-start-auto-check",
-    "allow-install-update"
+    "allow-set-auto-check-enabled",
+    "allow-install-update",
+    "allow-cancel-update"
   ]
 }

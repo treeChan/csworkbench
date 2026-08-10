@@ -1127,18 +1127,51 @@ button.pipeline-step:focus { outline: 2px solid var(--c-primary-light); outline-
     gap: 8px;
     line-height: 1;
 }
-.channel-toggle {
+/* 胶囊开关（iOS 风格 toggle）：隐藏原生 checkbox，用轨道 + 圆钮绘制 */
+.switch {
     display: inline-flex;
     align-items: center;
-    gap: 6px;
+    gap: 9px;
     cursor: pointer;
     font-size: 13px;
 }
-.channel-toggle input[type="checkbox"] {
-    accent-color: var(--c-primary);
-    width: 15px;
-    height: 15px;
-    cursor: pointer;
+.switch input[type="checkbox"] {
+    position: absolute;
+    opacity: 0;
+    width: 0;
+    height: 0;
+    margin: 0;
+}
+.switch .switch-track {
+    position: relative;
+    width: 40px;
+    height: 22px;
+    flex-shrink: 0;
+    border-radius: 999px;
+    background: var(--c-border);
+    transition: background 0.2s ease;
+}
+.switch .switch-track::after {
+    content: "";
+    position: absolute;
+    top: 2px;
+    left: 2px;
+    width: 18px;
+    height: 18px;
+    border-radius: 50%;
+    background: #fff;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.25);
+    transition: transform 0.2s ease;
+}
+.switch input[type="checkbox"]:checked + .switch-track {
+    background: var(--c-primary);
+}
+.switch input[type="checkbox"]:checked + .switch-track::after {
+    transform: translateX(18px);
+}
+.switch input[type="checkbox"]:focus-visible + .switch-track {
+    outline: 2px solid var(--c-primary-light);
+    outline-offset: 2px;
 }
 /* 更新下载进度条 */
 .update-progress {
@@ -1294,7 +1327,6 @@ button.pipeline-step:focus { outline: 2px solid var(--c-primary-light); outline-
 .about-version-cell .update-check-btn {
     margin: 0;
     white-space: nowrap;
-}
 }
 
 .path-input-row { display: flex; gap: 8px; align-items: center; }

@@ -184,6 +184,7 @@
         </div>
         <div class="update-modal-actions">
             <button type="button" class="btn btn-outline" id="update-modal-later">稍后</button>
+            <button type="button" class="btn btn-outline" id="update-modal-cancel" hidden>取消</button>
             <button type="button" class="btn btn-primary" id="update-modal-now">立即更新</button>
         </div>
     </div>
@@ -405,7 +406,7 @@ function selectQuickType(btn) {
 /* ===== 全局更新弹窗（桌面版 Tauri）=====
    启动后调用 start_auto_check 静默检查；有新版时 Rust 广播 update://available，
    这里在任意页面屏幕正中弹窗展示版本号 + 更新日志，点「立即更新」→ install_update
-   下载安装重启，进度实时展示。网络失败 Rust 侧每分钟静默重试，这里不打扰用户。 */
+   后台下载，进度实时展示；下载中可点「取消」中止。网络失败 Rust 侧每分钟静默重试。 */
 (function () {
     "use strict";
     var api = window.__TAURI__;
@@ -422,7 +423,9 @@ function selectQuickType(btn) {
     var progFill = document.getElementById("update-modal-fill");
     var progText = document.getElementById("update-modal-text");
     var laterBtn = document.getElementById("update-modal-later");
+    var cancelBtn = document.getElementById("update-modal-cancel");
     var nowBtn = document.getElementById("update-modal-now");
+    var downloading = false;         // 是否正在下载（决定按钮组形态）
 
     // 更新渠道：与设置页「加入预览计划」开关共用 localStorage 记录。
     var channel = "stable";
@@ -504,8 +507,31 @@ function selectQuickType(btn) {
                 : "更新说明见 GitHub Release 页面。";
         }
         modal.hidden = false;
+        resetButtons();
     }
     function closeModal() { modal.hidden = true; }
+
+    // 弹窗按钮形态：
+    //   空闲/失败/安装中：显示 [稍后] + [立即更新/重试]，无 [取消]
+    //   下载中：          [稍后] 消失，[立即更新] 变为不可点的状态文本，出现 [取消]
+    function resetButtons() {
+        downloading = false;
+        if (laterBtn) { laterBtn.hidden = false; laterBtn.disabled = false; }
+        if (nowBtn) { nowBtn.hidden = false; nowBtn.disabled = false; nowBtn.textContent = "立即更新"; }
+        if (cancelBtn) cancelBtn.hidden = true;
+    }
+    function enterDownloading() {
+        downloading = true;
+        if (laterBtn) { laterBtn.hidden = true; laterBtn.disabled = true; }
+        if (nowBtn) { nowBtn.hidden = true; nowBtn.disabled = true; }
+        if (cancelBtn) cancelBtn.hidden = false;
+    }
+    function exitDownloadingToError() {
+        downloading = false;
+        if (laterBtn) { laterBtn.hidden = false; laterBtn.disabled = false; }
+        if (nowBtn) { nowBtn.hidden = false; nowBtn.disabled = false; nowBtn.textContent = "重试"; }
+        if (cancelBtn) cancelBtn.hidden = true;
+    }
     function setProgress(pct, text) {
         if (progFill) progFill.style.width = pct + "%";
         if (progText) progText.textContent = text;
@@ -537,31 +563,53 @@ function selectQuickType(btn) {
             setProgress(0, "正在下载更新…（等待服务器响应）");
         }
     });
+    // 下载完成 → 即将安装，进入不可取消阶段
     listen("update://download-done", function () {
+        if (downloading) { downloading = false; }
+        if (laterBtn) { laterBtn.hidden = true; laterBtn.disabled = true; }
+        if (nowBtn) { nowBtn.hidden = true; nowBtn.disabled = true; }
+        if (cancelBtn) cancelBtn.hidden = true;
         progWrap.hidden = false;
         setProgress(100, "下载完成，正在安装并重启…");
+    });
+    // 下载失败 → 恢复按钮，可重试
+    listen("update://download-error", function (e) {
+        var msg = e && e.payload ? e.payload : "下载失败";
+        exitDownloadingToError();
+        progWrap.hidden = false;
+        setProgress(0, msg);
     });
 
     // 按钮
     if (laterBtn) laterBtn.addEventListener("click", closeModal);
+    // 取消：abort 后台下载任务；如果任务已结束（比如下载瞬间完成）则静默无事。
+    if (cancelBtn) cancelBtn.addEventListener("click", function () {
+        invoke("cancel_update").catch(function () {});
+        closeModal();
+    });
     if (nowBtn) nowBtn.addEventListener("click", function () {
-        nowBtn.disabled = true;
-        nowBtn.textContent = "正在更新…";
-        laterBtn.disabled = true;
+        enterDownloading();
         progWrap.hidden = false;
         setProgress(0, "准备下载…");
         invoke("install_update", { channel: channel })
-            .then(function () { /* 安装成功 → Rust 已触发重启 */ })
+            .then(function () { /* install_update 已启动后台任务，后续靠事件推进 */ })
             .catch(function (err) {
+                // 兜底（正常情况下载失败会走 update://download-error 事件；
+                // 这里捕获「任务已在进行」等立即拒绝的返回值）。
+                exitDownloadingToError();
+                progWrap.hidden = false;
                 setProgress(0, "更新失败：" + err);
-                nowBtn.disabled = false;
-                nowBtn.textContent = "重试";
-                laterBtn.disabled = false;
             });
     });
 
-    // 启动静默自动检查（每页面加载只触发一次 Rust 后台循环，Rust 侧网络失败每分钟重试）
-    invoke("start_auto_check", { channel: channel }).catch(function () {});
+    // 启动静默自动检查（每页面加载只触发一次 Rust 后台循环，Rust 侧网络失败每分钟重试）。
+    // 设置页「自动检查更新」开关关闭时（localStorage["wb-auto-check"] === "0"）不启动，
+    // 即打开软件不再扫描仓库；手动「检查更新」按钮不受影响。
+    var autoCheck = "1";
+    try { autoCheck = localStorage.getItem("wb-auto-check") || "1"; } catch (e) {}
+    if (autoCheck !== "0") {
+        invoke("start_auto_check", { channel: channel }).catch(function () {});
+    }
 })();
 </script>
 {% endblock %}

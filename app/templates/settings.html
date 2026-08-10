@@ -101,10 +101,26 @@
         <tr><td>应用名称</td><td>{{ app_name }}</td></tr>
         <tr><td>版本</td><td><span class="about-version-cell">v{{ version }} <button type="button" class="btn btn-outline btn-sm update-check-btn">检查更新</button></span></td></tr>
         <tr class="update-channel-row">
+            <td>自动检查更新</td>
+            <td>
+                <label class="switch">
+                    <input type="checkbox" id="auto-check-updates">
+                    <span class="switch-track" aria-hidden="true"></span>
+                    <span class="switch-label">打开软件时后台检查更新</span>
+                </label>
+                <p class="settings-hint">
+                    开启后每次启动自动扫描更新仓库，有新版本会弹出提示；关闭后只在点
+                    「检查更新」时手动检查。
+                </p>
+            </td>
+        </tr>
+        <tr class="update-channel-row">
             <td>更新渠道</td>
             <td>
-                <label class="channel-toggle">
-                    <input type="checkbox" id="update-channel-preview"> 加入预览计划（接收预览版更新）
+                <label class="switch">
+                    <input type="checkbox" id="update-channel-preview">
+                    <span class="switch-track" aria-hidden="true"></span>
+                    <span class="switch-label">加入预览计划（接收预览版更新）</span>
                 </label>
                 <p class="settings-hint">
                     默认只接收正式版更新；加入预览计划后同时接收预览版与正式版更新
@@ -178,8 +194,8 @@
                : (api && api.invoke ? api.invoke : null);
     if (!invoke) {
         btn.style.display = "none";
-        var row = document.querySelector(".update-channel-row");
-        if (row) row.style.display = "none";
+        var rows = document.querySelectorAll(".update-channel-row");
+        for (var i = 0; i < rows.length; i++) rows[i].style.display = "none";
         return;
     }
 
@@ -221,6 +237,13 @@
             showProgress();
             setProgress(100, "下载完成，正在安装并重启…");
         });
+        // 下载失败或用户取消 → 恢复隐藏进度条（下次下载重新出现）。
+        listen("update://download-error", function () {
+            if (progWrap) progWrap.hidden = true;
+        });
+        listen("update://download-cancelled", function () {
+            if (progWrap) progWrap.hidden = true;
+        });
     }
 
     // 载入时恢复预览计划状态
@@ -230,6 +253,28 @@
             try {
                 localStorage.setItem(CHANNEL_KEY, previewChk.checked ? "preview" : "stable");
             } catch (e) {}
+        });
+    }
+
+    // 「自动检查更新」开关：持久化在 localStorage["wb-auto-check"]（"1" 开 / "0" 关，
+    // 默认开）。关闭时通知 Rust 停掉正在运行的检查循环；开启时立即启动循环，
+    // 无需等下次页面加载。
+    var autoChk = document.getElementById("auto-check-updates");
+    var AUTO_CHECK_KEY = "wb-auto-check";
+    if (autoChk) {
+        try { autoChk.checked = localStorage.getItem(AUTO_CHECK_KEY) !== "0"; } catch (e) {}
+        autoChk.addEventListener("change", function () {
+            var enabled = autoChk.checked;
+            try { localStorage.setItem(AUTO_CHECK_KEY, enabled ? "1" : "0"); } catch (e) {}
+            if (enabled) {
+                // 开启：先允许启动（Rust 循环带 AutoCheckEnabled 标志），再启动循环。
+                invoke("set_auto_check_enabled", { enabled: true }).then(function () {
+                    var channel = previewChk && previewChk.checked ? "preview" : "stable";
+                    invoke("start_auto_check", { channel: channel }).catch(function () {});
+                }).catch(function () {});
+            } else {
+                invoke("set_auto_check_enabled", { enabled: false }).catch(function () {});
+            }
         });
     }
 
