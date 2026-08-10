@@ -48,7 +48,7 @@ TEMPLATES_DIR = BASE_DIR / "templates"
 
 # 静态资源缓存版本号：改 style.css / base.html 内嵌样式后 bump 此值，
 # 浏览器强制重新下载（对应 base.html 的 style.css?v={{ style_version }}）
-STYLE_VERSION = "20260810b"
+STYLE_VERSION = "20260810c"
 
 templates = Jinja2Templates(directory=str(TEMPLATES_DIR))
 
@@ -1357,6 +1357,21 @@ def mindmap_editor(
         mid_x = (x1 + x2) / 2
         return f"M {x1},{y1} C {mid_x},{y1} {mid_x},{y2} {x2},{y2}"
 
+    def _smart_anchors(
+        sx: float, sy: float, sw: float, sh: float,
+        tx: float, ty: float, tw: float, th: float,
+    ) -> tuple[float, float, float, float]:
+        """智能选边端点: 取源/目标中心 x 中点.
+        源在左 → 从源右侧出, 进入目标左侧;
+        源在右 → 从源左侧出, 进入目标右侧.
+        这样无论节点在哪个方向都能从最近一侧连.
+        """
+        src_cx = sx + sw / 2
+        tgt_cx = tx + tw / 2
+        if src_cx <= tgt_cx:
+            return (sx + sw, sy + sh / 2, tx, ty + th / 2)
+        return (sx, sy + sh / 2, tx + tw, ty + th / 2)
+
     edges_svg_parts: list[str] = []
 
     # 1) 自动树连线
@@ -1366,11 +1381,8 @@ def mindmap_editor(
             px, py = float(p.x), float(p.y)
             pw, ph = float(p.w), float(p.h)
             cx, cy = float(n.x), float(n.y)
-            ch = float(n.h)
-            x1 = px + pw
-            y1 = py + ph / 2
-            x2 = cx
-            y2 = cy + ch / 2
+            cw, ch = float(n.w), float(n.h)
+            x1, y1, x2, y2 = _smart_anchors(px, py, pw, ph, cx, cy, cw, ch)
             edges_svg_parts.append(
                 f'<path class="mm-edge mm-edge-auto" '
                 f'd="{_bezier_path(x1, y1, x2, y2)}" '
@@ -1386,10 +1398,8 @@ def mindmap_editor(
         sx, sy = float(src.x), float(src.y)
         sw, sh = float(src.w), float(src.h)
         tx, ty = float(tgt.x), float(tgt.y)
-        th = float(tgt.h)
-        # 源右侧中点 → 目标左侧中点
-        x1, y1 = sx + sw, sy + sh / 2
-        x2, y2 = tx, ty + th / 2
+        tw, th = float(tgt.w), float(tgt.h)
+        x1, y1, x2, y2 = _smart_anchors(sx, sy, sw, sh, tx, ty, tw, th)
         marker = ' marker-end="url(#mm-arrow)"' if e.arrow else ""
         edges_svg_parts.append(
             f'<path class="mm-edge mm-edge-manual" '

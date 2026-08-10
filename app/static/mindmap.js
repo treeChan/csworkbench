@@ -75,6 +75,29 @@
         return { w: 120, h: 60 };
     }
 
+    // 智能选边端点: 取源/目标中心 x 中点, 谁在左就从源右侧出 + 进入目标左侧;
+    // 谁在右就从源左侧出 + 进入目标右侧. 这样无论节点在哪个方向都能从最近一侧连.
+    function edgeAnchors(sx, sy, sw, sh, tx, ty, tw, th) {
+        const srcCx = sx + sw / 2;
+        const tgtCx = tx + tw / 2;
+        let x1, x2;
+        if (srcCx <= tgtCx) {
+            // 源在左 (或同列) → 从源右侧出, 进入目标左侧
+            x1 = sx + sw;
+            x2 = tx;
+        } else {
+            // 源在右 → 从源左侧出, 进入目标右侧
+            x1 = sx;
+            x2 = tx + tw;
+        }
+        return {
+            x1: x1,
+            y1: sy + sh / 2,
+            x2: x2,
+            y2: ty + th / 2,
+        };
+    }
+
     // ---- 初始化节点索引 ----
     function indexNodes() {
         nodeById.clear();
@@ -409,6 +432,21 @@
                 kind: el.getAttribute("data-kind"),
             };
         }
+        // 收集跟这个节点相连的 manual edges (后端 FK CASCADE 已删, 但前端 DOM 还在)
+        // auto edges 由 redrawEdges() 根据 parent_id 重生成, 不需要管
+        const orphanEdges = [];
+        edgeById.forEach(function (edgeEl, edgeId) {
+            const sid = parseInt(edgeEl.getAttribute("data-source"), 10);
+            const tid = parseInt(edgeEl.getAttribute("data-target"), 10);
+            if (sid === id || tid === id) {
+                orphanEdges.push({
+                    id: edgeId,
+                    source_id: sid,
+                    target_id: tid,
+                    arrow: edgeEl.getAttribute("data-arrow") === "true",
+                });
+            }
+        });
         setSaveState("saving");
         try {
             await api("/api/mindmap/nodes/" + id, { method: "DELETE" });
@@ -417,8 +455,22 @@
                 nodeById.delete(id);
                 if (selectedNode === el) clearSelection();
             }
+            // 立即移除 orphan edges (前端), 否则用户右键这条边找不到目标节点, 没法删
+            orphanEdges.forEach(function (e) {
+                const edgeEl = edgeById.get(e.id);
+                if (edgeEl) {
+                    edgeEl.remove();
+                    edgeById.delete(e.id);
+                }
+            });
+            // 触发 auto edges 重画 (父节点 / 子节点引用刚被删, 路径要更新)
+            redrawEdges();
             if (!skipUndo && snapshot) {
-                pushCommand({ type: "delete-node", node: snapshot });
+                pushCommand({
+                    type: "delete-node",
+                    node: snapshot,
+                    orphanEdges: orphanEdges,
+                });
             }
             setSaveState("saved");
         } catch (e) {
@@ -634,9 +686,9 @@
         const tM = tT.match(/translate\(([-\d.]+),([-\d.]+)\)/);
         const tx = tM ? parseFloat(tM[1]) : 0;
         const ty = tM ? parseFloat(tM[2]) : 0;
-        const th = tSize.h;
-        const x1 = sx + sw, y1 = sy + sh / 2;
-        const x2 = tx,      y2 = ty + th / 2;
+        const tw = tSize.w, th = tSize.h;
+        const a = edgeAnchors(sx, sy, sw, sh, tx, ty, tw, th);
+        const x1 = a.x1, y1 = a.y1, x2 = a.x2, y2 = a.y2;
         const midX = (x1 + x2) / 2;
         const d = `M ${x1},${y1} C ${midX},${y1} ${midX},${y2} ${x2},${y2}`;
         const p = document.createElementNS(NS_SVG, "path");
@@ -811,11 +863,46 @@
                     nodesLayer.appendChild(el);
                     nodeById.set(n.id, el);
                     attachNodeHandlers(el);
+                    // 同步重建关联的 manual edges
+                    if (cmd.orphanEdges && cmd.orphanEdges.length) {
+                        for (const oe of cmd.orphanEdges) {
+                            // 源/目标两端都得还活着 (另一端可能也在这条 undo 链里被恢复)
+                            // 用 cmd.node.id 替换新节点的 id (因为 cmd.node.id 是旧 id)
+                            const sid = oe.source_id === cmd.node.id ? n.id : oe.source_id;
+                            const tid = oe.target_id === cmd.node.id ? n.id : oe.target_id;
+                            if (!$node(sid) || !$node(tid)) continue;
+                            try {
+                                const edge = await api(
+                                    "/api/projects/" + projectId + "/mindmap/edges",
+                                    { method: "POST", body: {
+                                        source_id: sid, target_id: tid, arrow: oe.arrow,
+                                    } }
+                                );
+                                const edgeEl = buildEdgeEl(edge);
+                                if (edgeEl) {
+                                    edgesLayer.appendChild(edgeEl);
+                                    edgeById.set(edge.id, edgeEl);
+                                    attachEdgeHandlers(edgeEl);
+                                }
+                            } catch (e) { /* 已存在等错误, 静默 */ }
+                        }
+                    }
                 } else {
                     const id = cmd.node.id;
                     await api("/api/mindmap/nodes/" + id, { method: "DELETE" });
                     const el = $node(id);
                     if (el) { el.remove(); nodeById.delete(id); }
+                    // redo 时也清掉关联 edges (orphanEdges 是快照, 用原始 ids 找)
+                    if (cmd.orphanEdges && cmd.orphanEdges.length) {
+                        cmd.orphanEdges.forEach(function (oe) {
+                            const edgeEl = edgeById.get(oe.id);
+                            if (edgeEl) {
+                                edgeEl.remove();
+                                edgeById.delete(oe.id);
+                            }
+                        });
+                    }
+                    redrawEdges();
                 }
             } else if (cmd.type === "patch-node") {
                 const fields = useBefore ? cmd.before : cmd.after;
@@ -1240,8 +1327,10 @@
             const cm = (el.getAttribute("transform") || "").match(/translate\(([-\d.]+),([-\d.]+)\)/);
             if (!cm) return;
             const cx = parseFloat(cm[1]), cy = parseFloat(cm[2]);
-            const ch = getNodeSize(el).h;
-            const x1 = px + pw, y1 = py + ph / 2, x2 = cx, y2 = cy + ch / 2;
+            const cSize = getNodeSize(el);
+            const cw = cSize.w, ch = cSize.h;
+            const a = edgeAnchors(px, py, pw, ph, cx, cy, cw, ch);
+            const x1 = a.x1, y1 = a.y1, x2 = a.x2, y2 = a.y2;
             const mid = (x1 + x2) / 2;
             const path = document.createElementNS(NS_SVG, "path");
             path.setAttribute("class", "mm-edge mm-edge-auto");
@@ -1264,8 +1353,10 @@
             const sSize = getNodeSize(src);
             const sw = sSize.w, sh = sSize.h;
             const tx = parseFloat(tm[1]), ty = parseFloat(tm[2]);
-            const th = getNodeSize(tgt).h;
-            const x1 = sx + sw, y1 = sy + sh / 2, x2 = tx, y2 = ty + th / 2;
+            const tSize = getNodeSize(tgt);
+            const tw = tSize.w, th = tSize.h;
+            const a = edgeAnchors(sx, sy, sw, sh, tx, ty, tw, th);
+            const x1 = a.x1, y1 = a.y1, x2 = a.x2, y2 = a.y2;
             const mid = (x1 + x2) / 2;
             el.setAttribute("d", "M " + x1 + "," + y1 + " C " + mid + "," + y1 + " " + mid + "," + y2 + " " + x2 + "," + y2);
         });
@@ -1287,8 +1378,10 @@
             const sSize = getNodeSize(src);
             const sw = sSize.w, sh = sSize.h;
             const tx = parseFloat(tm[1]), ty = parseFloat(tm[2]);
-            const th = getNodeSize(tgt).h;
-            const x1 = sx + sw, y1 = sy + sh / 2, x2 = tx, y2 = ty + th / 2;
+            const tSize = getNodeSize(tgt);
+            const tw = tSize.w, th = tSize.h;
+            const a = edgeAnchors(sx, sy, sw, sh, tx, ty, tw, th);
+            const x1 = a.x1, y1 = a.y1, x2 = a.x2, y2 = a.y2;
             const mid = (x1 + x2) / 2;
             el.setAttribute("d", "M " + x1 + "," + y1 + " C " + mid + "," + y1 + " " + mid + "," + y2 + " " + x2 + "," + y2);
         });
