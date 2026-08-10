@@ -48,7 +48,7 @@ TEMPLATES_DIR = BASE_DIR / "templates"
 
 # 静态资源缓存版本号：改 style.css / base.html 内嵌样式后 bump 此值，
 # 浏览器强制重新下载（对应 base.html 的 style.css?v={{ style_version }}）
-STYLE_VERSION = "20260810g"
+STYLE_VERSION = "20260810j"
 
 templates = Jinja2Templates(directory=str(TEMPLATES_DIR))
 
@@ -78,17 +78,36 @@ try:
     import markdown as _md
 
     def _md_render(text: str) -> str:
+        # escape: 转义 raw HTML, 防止用户在 markdown 里塞 <script> 等
+        # (单用户本地应用风险低, 但还是加一层)
         return _md.markdown(
             text,
-            extensions=["fenced_code", "tables", "codehilite", "sane_lists"],
-        )
+            extensions=["fenced_code", "tables", "codehilite", "sane_lists", "nl2br"],
+            output_format="html",
+        ).replace("<script>", "&lt;script&gt;").replace("</script>", "&lt;/script&gt;")
+
+    def _note_render(text: str, fmt: str = "md") -> str:
+        """笔记渲染:  'md' 走 Markdown, 'text' 当作纯文本 (escape HTML + nl2br).
+        老笔记没存 format, 默认当 md 处理.
+        """
+        if not text:
+            return ""
+        if fmt == "text":
+            from xml.sax.saxutils import escape as xml_escape
+            return "<p>" + xml_escape(text).replace("\n", "<br>") + "</p>"
+        return _md_render(text)
 
     templates.env.filters["markdown"] = _md_render
+    templates.env.filters["note_render"] = _note_render
 except ImportError:  # 兜底
     def _md_render(text: str) -> str:  # type: ignore[no-redef]
         return f"<pre>{text}</pre>"
 
+    def _note_render(text: str, fmt: str = "md") -> str:  # type: ignore[no-redef]
+        return f"<pre>{text}</pre>"
+
     templates.env.filters["markdown"] = _md_render
+    templates.env.filters["note_render"] = _note_render
 
 
 router = APIRouter()
@@ -766,13 +785,20 @@ def remove_metric(
 def add_note(
     experiment_id: int,
     content: str = Form(..., min_length=1),
+    note_format: str = Form("md", alias="format"),
     db: Session = Depends(get_db),
 ):
     exp = crud.get_experiment(db, experiment_id)
     if exp is None:
         raise HTTPException(404, "Experiment not found")
-    crud.create_note(db, experiment_id, schemas.NoteCreate(content=content))
-    return RedirectResponse(f"/experiments/{experiment_id}", status_code=303)
+    # 兜底: 防止非法 format 值溜进来
+    if note_format not in ("md", "text"):
+        note_format = "md"
+    crud.create_note(
+        db, experiment_id,
+        schemas.NoteCreate(content=content, format=note_format),
+    )
+    return RedirectResponse(f"/experiments/{experiment_id}/results", status_code=303)
 
 
 @router.post("/notes/{note_id}/delete")
@@ -1266,6 +1292,10 @@ def _render_mindmap_node(node) -> str:
     # z_index / parent_id 也塞进 data 属性，方便前端拖拽重绘连线 + 置顶置底
     parent_attr = f' data-parent="{node.parent_id}"' if node.parent_id else ""
     z_attr = f' data-z="{node.z_index}"'
+    # A1: 容器归属 (None 时不写属性, 前端判定缺失 = 无容器)
+    container_attr = (
+        f' data-container="{node.container_id}"' if getattr(node, "container_id", None) else ""
+    )
 
     # 自定义填色 / 字色 (None 时 CSS 用默认, 这里不写属性保持简洁)
     fill_attr = f' data-fill-color="{xml_escape(node.fill_color)}"' if node.fill_color else ""
@@ -1276,7 +1306,7 @@ def _render_mindmap_node(node) -> str:
         f'data-id="{safe_id}" '
         f'data-kind="{xml_escape(node.kind)}" '
         f'data-shape="{xml_escape(node.shape_type)}"'
-        f'{parent_attr}{z_attr} '
+        f'{parent_attr}{z_attr}{container_attr} '
         f'data-w="{w}" data-h="{h}" '
         f'{fill_attr}{font_attr} '
         f'transform="translate({x},{y})">'
@@ -1313,6 +1343,12 @@ def _render_mindmap_node(node) -> str:
     elif node.shape_type == "text":
         # 纯文本框：无背景
         shape_svg = ""
+    elif node.shape_type == "container":
+        # A1 容器: 虚线圆角矩形 + 角落 "容器" 角标
+        shape_svg = (
+            f'<rect width="{w}" height="{h}" rx="10" class="mm-shape mm-shape-container"{fill_style}/>'
+            f'<text x="10" y="16" class="mm-shape-container-badge" data-badge="container">容器</text>'
+        )
     else:
         # rect / rounded / sticky-*：默认矩形 + rx
         rx = "12" if node.shape_type == "rounded" else "4"
@@ -1340,7 +1376,7 @@ def _render_mindmap_node(node) -> str:
         f'<foreignObject x="0" y="0" width="{w}" height="{h}">'
         f'<div xmlns="http://www.w3.org/1999/xhtml" '
         f'class="mm-label" '
-        f'style="font-size:{font_size}px;font-family:{family_stack}{font_color_style}">{safe_label}</div>'
+        f'style="font-size:{font_size}px;font-family:{family_stack}{font_color_style}">{safe_label or ("拖节点进这里" if node.shape_type == "container" else "")}</div>'
         f'</foreignObject>'
     )
 

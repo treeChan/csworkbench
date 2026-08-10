@@ -1074,6 +1074,13 @@ button.pipeline-step:focus { outline: 2px solid var(--c-primary-light); outline-
     color: var(--c-text-soft);
     margin-top: 2px;
 }
+.search-snippet mark {
+    background: rgba(168, 85, 247, 0.22);
+    color: var(--c-primary-dark);
+    padding: 0 2px;
+    border-radius: 3px;
+    font-weight: 600;
+}
 .search-download {
     float: right;
     font-size: 11.5px;
@@ -1620,6 +1627,33 @@ button.pipeline-step:focus { outline: 2px solid var(--c-primary-light); outline-
 .mm-node.shape-sticky-blue .mm-shape   { fill: #dbeafe; stroke: #60a5fa; }
 .mm-node.shape-text .mm-shape         { display: none; }
 
+/* A1: 容器节点 — 半透明紫底 + 虚线边框 + "容器" 角标 */
+.mm-node.shape-container .mm-shape {
+    fill: rgba(168, 85, 247, 0.07);
+    stroke: rgba(168, 85, 247, 0.55);
+    stroke-width: 1.5;
+    stroke-dasharray: 6 4;
+}
+.mm-node.shape-container.selected .mm-shape {
+    fill: rgba(168, 85, 247, 0.15);
+    stroke: #a855f7;
+    stroke-width: 2;
+}
+.mm-node.shape-container .mm-shape-container-badge {
+    fill: #a855f7;
+    font-size: 10px;
+    font-weight: 600;
+    color: #fff;
+    pointer-events: none;
+    user-select: none;
+}
+.mm-node.shape-container .mm-label {
+    color: var(--c-primary-dark);
+    font-size: 11px;
+    font-weight: 500;
+    opacity: 0.7;
+}
+
 .mm-label {
     display: flex;
     align-items: center;
@@ -1788,6 +1822,20 @@ button.pipeline-step:focus { outline: 2px solid var(--c-primary-light); outline-
 .mm-link-mode .mm-node {
     cursor: crosshair !important;
 }
+
+/* A1: 容器拾取模式 - 节点变手型 + 容器额外高亮 */
+body.mm-pick-container svg.mm-canvas,
+body.mm-pick-container .mm-canvas-wrap {
+    cursor: alias !important;
+}
+body.mm-pick-container .mm-node.shape-container {
+    cursor: pointer !important;
+}
+body.mm-pick-container .mm-node.shape-container .mm-shape {
+    stroke-width: 3;
+    filter: drop-shadow(0 0 8px rgba(168, 85, 247, 0.6));
+}
+
 /* ---- 颜色选择器 ---- */
 .mm-color-input {
     width: 32px;
@@ -1860,3 +1908,76 @@ button.pipeline-step:focus { outline: 2px solid var(--c-primary-light); outline-
     background: var(--c-bg-soft, #f6f7f9);
     border-color: var(--c-border);
 }
+
+/* ---- Markdown 渲染内容 (.md) ---- */
+/* 用于笔记 / 设计说明 / config_md 等 markdown 输出 */
+.md {
+    font-size: 13.5px;
+    line-height: 1.6;
+    color: var(--c-text);
+}
+.md > :first-child { margin-top: 0; }
+.md > :last-child { margin-bottom: 0; }
+.md h1, .md h2, .md h3, .md h4 {
+    margin: 14px 0 6px 0;
+    font-weight: 600;
+    line-height: 1.3;
+}
+.md h1 { font-size: 18px; }
+.md h2 { font-size: 16px; border-bottom: 1px solid var(--c-border); padding-bottom: 4px; }
+.md h3 { font-size: 14.5px; }
+.md h4 { font-size: 13.5px; color: var(--c-text-soft); }
+.md p { margin: 6px 0; }
+.md ul, .md ol { margin: 6px 0; padding-left: 22px; }
+.md li { margin: 2px 0; }
+.md blockquote {
+    margin: 8px 0;
+    padding: 6px 12px;
+    border-left: 3px solid var(--c-primary-light, #A78BFA);
+    background: var(--c-bg-soft);
+    color: var(--c-text-soft);
+    border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
+}
+.md code {
+    background: var(--c-bg-soft);
+    padding: 1px 5px;
+    border-radius: 3px;
+    font-size: 12.5px;
+    font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+}
+.md pre {
+    margin: 8px 0;
+    padding: 10px 12px;
+    background: var(--c-bg-soft);
+    border: 1px solid var(--c-border);
+    border-radius: var(--radius-md);
+    overflow-x: auto;
+    font-size: 12.5px;
+    line-height: 1.5;
+}
+.md pre code {
+    background: none;
+    padding: 0;
+    border-radius: 0;
+}
+.md table {
+    border-collapse: collapse;
+    margin: 8px 0;
+    font-size: 12.5px;
+}
+.md th, .md td {
+    border: 1px solid var(--c-border);
+    padding: 4px 8px;
+    text-align: left;
+}
+.md th { background: var(--c-bg-soft); font-weight: 600; }
+.md hr {
+    border: none;
+    border-top: 1px dashed var(--c-border);
+    margin: 12px 0;
+}
+.md a {
+    color: var(--c-primary);
+    text-decoration: none;
+}
+.md a:hover { text-decoration: underline; }

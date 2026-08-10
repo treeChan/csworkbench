@@ -193,7 +193,11 @@ def list_notes(db: Session, experiment_id: int) -> Sequence[models.Note]:
 def create_note(
     db: Session, experiment_id: int, data: schemas.NoteCreate
 ) -> models.Note:
-    note = models.Note(experiment_id=experiment_id, content=data.content)
+    note = models.Note(
+        experiment_id=experiment_id,
+        content=data.content,
+        format=getattr(data, "format", "md"),
+    )
     db.add(note)
     db.commit()
     db.refresh(note)
@@ -787,8 +791,39 @@ def recent_activity(
 
 def _snip(text: str | None, limit: int = 80) -> str:
     """把正文压成一行摘要，超长截断。"""
+    from xml.sax.saxutils import escape as xml_escape
     flat = " ".join((text or "").split())
-    return flat if len(flat) <= limit else flat[:limit] + "…"
+    out = xml_escape(flat if len(flat) <= limit else flat[:limit] + "…")
+    return out
+
+
+def _highlight(text: str | None, query: str, context: int = 30, limit: int = 120) -> str:
+    """把正文压成带高亮的摘要：找到 query 第一次出现的位置,
+    取前后 context 字, 用 <mark> 包裹命中段. HTML 已 escape, 可直接 | safe 输出.
+
+    - query 为空 / 没命中 → 退化成 _snip 风格截断
+    - 命中位置居中截取, 头尾各加 … 表示省略
+    """
+    from xml.sax.saxutils import escape as xml_escape
+    if not text:
+        return ""
+    flat = " ".join(text.split())
+    if not query:
+        return _snip(text, limit)
+    idx = flat.lower().find(query.lower())
+    if idx < 0:
+        return _snip(text, limit)
+    start = max(0, idx - context)
+    end = min(len(flat), idx + len(query) + context)
+    prefix = "…" if start > 0 else ""
+    suffix = "…" if end < len(flat) else ""
+    snip = flat[start:end]
+    match_start = idx - start
+    match_end = match_start + len(query)
+    before = xml_escape(snip[:match_start])
+    matched = xml_escape(snip[match_start:match_end])
+    after = xml_escape(snip[match_end:])
+    return f"{prefix}{before}<mark>{matched}</mark>{after}{suffix}"
 
 
 def search_all(
@@ -826,7 +861,7 @@ def search_all(
                     {
                         "title": p.name,
                         "badge": p.status,
-                        "snippet": _snip(p.description),
+                        "snippet": _highlight(p.description, query) if fulltext else _snip(p.description),
                         "link": f"/projects/{p.id}",
                     }
                     for p in projects
@@ -864,7 +899,10 @@ def search_all(
         {
             "title": e.name,
             "badge": "实验",
-            "snippet": _snip(e.hypothesis or e.description),
+            "snippet": (
+                _highlight(e.hypothesis or e.description, query) if fulltext
+                else _snip(e.hypothesis or e.description)
+            ),
             "link": f"/experiments/{e.id}",
         }
         for e in exps
@@ -872,7 +910,10 @@ def search_all(
         {
             "title": g.name,
             "badge": "大目标",
-            "snippet": _snip(g.description),
+            "snippet": (
+                _highlight(g.description, query) if fulltext
+                else _snip(g.description)
+            ),
             "link": f"/projects/{g.project_id}",
         }
         for g in goals
@@ -901,7 +942,10 @@ def search_all(
                     {
                         "title": a.original_name,
                         "badge": a.kind,
-                        "snippet": _snip(a.description),
+                        "snippet": (
+                            _highlight(a.description, query) if fulltext and a.description
+                            else _snip(a.description)
+                        ),
                         "link": (
                             f"/experiments/{a.experiment_id}"
                             if a.experiment_id
@@ -935,17 +979,17 @@ def search_all(
         ).all()
     items = [
         {
-            "title": _snip(d.content, 50),
+            "title": _highlight(d.content, query, context=20, limit=50),
             "badge": "决策",
-            "snippet": _snip(d.content),
+            "snippet": _highlight(d.content, query),
             "link": f"/projects/{d.project_id}",
         }
         for d in decs
     ] + [
         {
-            "title": _snip(n.content, 50),
+            "title": _highlight(n.content, query, context=20, limit=50),
             "badge": "笔记",
-            "snippet": _snip(n.content),
+            "snippet": _highlight(n.content, query),
             "link": f"/experiments/{n.experiment_id}",
         }
         for n in notes
@@ -981,7 +1025,10 @@ def search_all(
                     {
                         "title": r.title or f"第 {r.week_start_date.isocalendar()[1]} 周",
                         "badge": r.week_start_date.isoformat(),
-                        "snippet": _snip(r.highlights or r.content),
+                        "snippet": (
+                            _highlight(r.highlights or r.content, query) if fulltext
+                            else _snip(r.highlights or r.content)
+                        ),
                         "link": f"/review/{r.id}",
                     }
                     for r in reviews
@@ -1096,6 +1143,7 @@ def create_node(
         w=data.w,
         h=data.h,
         z_index=data.z_index,
+        container_id=data.container_id,
     )
     db.add(node)
     db.commit()
@@ -1107,7 +1155,11 @@ def update_node(
     db: Session, node: models.MindmapNode, data: schemas.MindmapNodeUpdate
 ) -> models.MindmapNode:
     """部分字段更新。"""
-    for field, value in data.model_dump(exclude_unset=True).items():
+    payload = data.model_dump(exclude_unset=True)
+    # 防止把节点塞进自己 (或自己的后代, 这里只防直接自环)
+    if "container_id" in payload and payload["container_id"] == node.id:
+        raise ValueError("节点不能成为自己的容器")
+    for field, value in payload.items():
         setattr(node, field, value)
     # 顺手刷新 updated_at（onupdate 已自动，但显式更稳）
     node.updated_at = datetime.utcnow()
@@ -1117,6 +1169,7 @@ def update_node(
 
 
 def delete_node(db: Session, node: models.MindmapNode) -> None:
+    """删除节点。ON DELETE SET NULL 会自动解除子节点关系 (容器专属)。"""
     db.delete(node)
     db.commit()
 

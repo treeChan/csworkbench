@@ -203,8 +203,11 @@
     {% if notes %}
         {% for n in notes %}
         <div style="border-left: 3px solid var(--c-primary-light); padding: 8px 12px; margin-bottom: 10px; background: var(--c-bg-soft); border-radius: 0 var(--radius-md) var(--radius-md) 0;">
-            <div class="md">{{ n.content | markdown | safe }}</div>
-            <small style="color: var(--c-text-faint); font-size: 11.5px;">{{ n.created_at | fmt_dt }}</small>
+            <div class="md">{{ n.content | note_render(n.format) | safe }}</div>
+            <small style="color: var(--c-text-faint); font-size: 11.5px;">
+                {{ n.created_at | fmt_dt }}
+                {% if n.format == 'text' %}<span style="margin-left: 6px; padding: 0 4px; background: var(--c-bg); border-radius: 3px;">文本</span>{% endif %}
+            </small>
         </div>
         {% endfor %}
     {% else %}
