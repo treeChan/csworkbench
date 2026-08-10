@@ -1799,6 +1799,11 @@ button.pipeline-step:focus { outline: 2px solid var(--c-primary-light); outline-
     align-items: center;
     gap: 8px;
 }
+/* [hidden] 属性默认 display:none, 但被 .mm-link-banner 的 display:flex 覆盖.
+   这里显式提升优先级, 让 hidden 时真的隐藏. */
+.mm-link-banner[hidden] {
+    display: none;
+}
 .mm-link-banner kbd {
     background: rgba(255, 255, 255, 0.25);
     padding: 1px 6px;

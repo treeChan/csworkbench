@@ -48,7 +48,7 @@ TEMPLATES_DIR = BASE_DIR / "templates"
 
 # 静态资源缓存版本号：改 style.css / base.html 内嵌样式后 bump 此值，
 # 浏览器强制重新下载（对应 base.html 的 style.css?v={{ style_version }}）
-STYLE_VERSION = "20260810a"
+STYLE_VERSION = "20260810b"
 
 templates = Jinja2Templates(directory=str(TEMPLATES_DIR))
 
