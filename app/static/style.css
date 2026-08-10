@@ -1658,6 +1658,12 @@ button.pipeline-step:focus { outline: 2px solid var(--c-primary-light); outline-
     stroke-dasharray: 0;
 }
 
+/* 拖锚点时的临时连线: 不接收 pointer 事件, 否则鼠标松开时
+   elementFromPoint 会命中它 (而不是下面的目标节点), 导致连边失败 */
+.mm-edge.mm-edge-temp {
+    pointer-events: none;
+}
+
 /* ---- 右键菜单 ---- */
 .mm-context-menu {
     position: fixed;

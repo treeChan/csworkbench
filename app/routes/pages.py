@@ -48,7 +48,7 @@ TEMPLATES_DIR = BASE_DIR / "templates"
 
 # 静态资源缓存版本号：改 style.css / base.html 内嵌样式后 bump 此值，
 # 浏览器强制重新下载（对应 base.html 的 style.css?v={{ style_version }}）
-STYLE_VERSION = "20260810f"
+STYLE_VERSION = "20260810g"
 
 templates = Jinja2Templates(directory=str(TEMPLATES_DIR))
 
@@ -1377,16 +1377,24 @@ def mindmap_editor(
         sx: float, sy: float, sw: float, sh: float,
         tx: float, ty: float, tw: float, th: float,
     ) -> tuple[float, float, float, float]:
-        """智能选边端点: 取源/目标中心 x 中点.
-        源在左 → 从源右侧出, 进入目标左侧;
-        源在右 → 从源左侧出, 进入目标右侧.
-        这样无论节点在哪个方向都能从最近一侧连.
+        """智能选边端点: 水平距离 ≥ 垂直距离 → 出左右; 否则出上下.
+        让节点上下/左右布局都能从最近一侧连.
         """
         src_cx = sx + sw / 2
+        src_cy = sy + sh / 2
         tgt_cx = tx + tw / 2
-        if src_cx <= tgt_cx:
-            return (sx + sw, sy + sh / 2, tx, ty + th / 2)
-        return (sx, sy + sh / 2, tx + tw, ty + th / 2)
+        tgt_cy = ty + th / 2
+        dx = abs(src_cx - tgt_cx)
+        dy = abs(src_cy - tgt_cy)
+        if dx >= dy:
+            # 水平方向为主 → 出左右
+            if src_cx <= tgt_cx:
+                return (sx + sw, src_cy, tx, tgt_cy)
+            return (sx, src_cy, tx + tw, tgt_cy)
+        # 垂直方向为主 → 出上下
+        if src_cy <= tgt_cy:
+            return (src_cx, sy + sh, tgt_cx, ty)
+        return (src_cx, sy, tgt_cx, ty + th)
 
     edges_svg_parts: list[str] = []
 

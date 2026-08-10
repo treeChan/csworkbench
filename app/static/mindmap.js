@@ -73,27 +73,28 @@
         return { w: 120, h: 60 };
     }
 
-    // 智能选边端点: 取源/目标中心 x 中点, 谁在左就从源右侧出 + 进入目标左侧;
-    // 谁在右就从源左侧出 + 进入目标右侧. 这样无论节点在哪个方向都能从最近一侧连.
+    // 智能选边端点: 水平距离 ≥ 垂直距离 → 出左右; 否则出上下. 节点上下/左右布局都能从最近一侧连.
     function edgeAnchors(sx, sy, sw, sh, tx, ty, tw, th) {
         const srcCx = sx + sw / 2;
+        const srcCy = sy + sh / 2;
         const tgtCx = tx + tw / 2;
-        let x1, x2;
-        if (srcCx <= tgtCx) {
-            // 源在左 (或同列) → 从源右侧出, 进入目标左侧
-            x1 = sx + sw;
-            x2 = tx;
-        } else {
-            // 源在右 → 从源左侧出, 进入目标右侧
-            x1 = sx;
-            x2 = tx + tw;
+        const tgtCy = ty + th / 2;
+        const dx = Math.abs(srcCx - tgtCx);
+        const dy = Math.abs(srcCy - tgtCy);
+        // 选边方向: 水平距离 ≥ 垂直距离 → 出左右; 否则出上下.
+        // 之前的版本只看 srcCx vs tgtCx, 上下布局的节点会强行出左右, 出现奇怪的折线
+        if (dx >= dy) {
+            // 水平方向为主 → 出左右
+            if (srcCx <= tgtCx) {
+                return { x1: sx + sw, y1: srcCy, x2: tx,      y2: tgtCy };
+            }
+            return { x1: sx,      y1: srcCy, x2: tx + tw, y2: tgtCy };
         }
-        return {
-            x1: x1,
-            y1: sy + sh / 2,
-            x2: x2,
-            y2: ty + th / 2,
-        };
+        // 垂直方向为主 → 出上下
+        if (srcCy <= tgtCy) {
+            return { x1: srcCx, y1: sy + sh, x2: tgtCx, y2: ty };
+        }
+        return { x1: srcCx, y1: sy,      x2: tgtCx, y2: ty + th };
     }
 
     // ---- 初始化节点索引 ----
