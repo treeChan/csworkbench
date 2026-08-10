@@ -55,7 +55,7 @@
             {% endif %}
             <a href="{{ item.link }}" class="search-title">{{ item.title }}</a>
             {% if item.badge %}<span class="badge badge-status">{{ item.badge }}</span>{% endif %}
-            {% if item.snippet %}<div class="search-snippet">{{ item.snippet }}</div>{% endif %}
+            {% if item.snippet %}<div class="search-snippet">{{ item.snippet | safe }}</div>{% endif %}
         </li>
         {% endfor %}
     </ul>

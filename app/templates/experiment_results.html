@@ -157,9 +157,18 @@
 
     <form method="post" action="/experiments/{{ experiment.id }}/notes"
           style="margin-bottom: 14px;">
-        <textarea name="content" rows="3" placeholder="训练过程观察、灵感、问题…"
+        <textarea name="content" rows="3" placeholder="训练过程观察、灵感、问题…（支持 Markdown: **粗体** / - 列表 / `代码` / # 标题）"
                   style="width: 100%; padding: 8px 10px; border: 1px solid var(--c-border); border-radius: var(--radius-md); font-size: 13px;"></textarea>
-        <div style="text-align: right; margin-top: 6px;">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 6px;">
+            <div style="font-size: 11.5px; color: var(--c-text-faint); display: flex; gap: 10px; align-items: center;">
+                <span>格式:</span>
+                <label style="cursor: pointer;">
+                    <input type="radio" name="format" value="md" checked> Markdown
+                </label>
+                <label style="cursor: pointer;">
+                    <input type="radio" name="format" value="text"> 纯文本
+                </label>
+            </div>
             <button type="submit" class="btn btn-primary" style="padding: 6px 14px; font-size: 12.5px;">+ 记录</button>
         </div>
     </form>
@@ -167,9 +176,12 @@
     {% if notes %}
         {% for n in notes %}
         <div style="border-left: 3px solid var(--c-primary-light); padding: 8px 12px; margin-bottom: 10px; background: var(--c-bg-soft); border-radius: 0 var(--radius-md) var(--radius-md) 0;">
-            <div class="md">{{ n.content | markdown | safe }}</div>
+            <div class="md">{{ n.content | note_render(n.format) | safe }}</div>
             <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 6px;">
-                <small style="color: var(--c-text-faint); font-size: 11.5px;">{{ n.created_at | fmt_dt }}</small>
+                <small style="color: var(--c-text-faint); font-size: 11.5px;">
+                    {{ n.created_at | fmt_dt }}
+                    {% if n.format == 'text' %}<span style="margin-left: 6px; padding: 0 4px; background: var(--c-bg); border-radius: 3px;">文本</span>{% endif %}
+                </small>
                 <form method="post" action="/notes/{{ n.id }}/delete" style="display:inline;">
                     <button type="submit" class="btn btn-outline" style="padding: 1px 6px; font-size: 11px;">删除</button>
                 </form>

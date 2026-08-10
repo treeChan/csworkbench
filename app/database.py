@@ -219,12 +219,34 @@ def _migrate_2026_08_05() -> None:
 
 
 def _migrate_2026_08_10() -> None:
-    """2026-08-10: 思维导图节点支持自定义填充色和字体色。
+    """2026-08-10: 思维导图节点支持自定义填充色和字体色 + 笔记 format 字段。
     字段已由 _migrate_2026_08_05 (拆分扩展版) 加过, 这里只做兜底,
     不再重复 ALTER (PRAGMA 检查时会自动跳过)。保留此函数以便未来追加字段。
     """
-    # 字段实际添加已合并到 _migrate_2026_08_05 的尾部. 这里只放个 hook.
-    return
+    with engine.begin() as conn:
+        # --- notes.format (2026-08-10 笔记 Markdown/纯文本切换) ---
+        if not _column_exists(conn, "notes", "format"):
+            conn.execute(
+                text(
+                    "ALTER TABLE notes "
+                    "ADD COLUMN format VARCHAR(10) NOT NULL DEFAULT 'md'"
+                )
+            )
+        # --- mindmap_nodes.container_id (2026-08-10 A1 容器节点) ---
+        if not _column_exists(conn, "mindmap_nodes", "container_id"):
+            conn.execute(
+                text(
+                    "ALTER TABLE mindmap_nodes "
+                    "ADD COLUMN container_id INTEGER "
+                    "REFERENCES mindmap_nodes(id) ON DELETE SET NULL"
+                )
+            )
+            conn.execute(
+                text(
+                    "CREATE INDEX IF NOT EXISTS ix_mindmap_nodes_container_id "
+                    "ON mindmap_nodes (container_id)"
+                )
+            )
 
 
 def init_db() -> None:

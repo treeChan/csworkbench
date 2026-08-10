@@ -157,12 +157,14 @@ class MetricRead(BaseModel):
 
 class NoteCreate(BaseModel):
     content: str = Field(..., min_length=1)
+    format: str = Field("md", pattern=r"^(md|text)$")
 
 
 class NoteRead(BaseModel):
     id: int
     experiment_id: int
     content: str
+    format: str = "md"
     created_at: datetime
 
     model_config = ConfigDict(from_attributes=True)
@@ -284,6 +286,7 @@ SHAPE_TYPES = {
     "sticky-yellow",
     "sticky-pink",
     "sticky-blue",
+    "container",  # 容器：半透明虚线框，可包含其他节点 (A1)
 }
 
 
@@ -301,6 +304,7 @@ class MindmapNodeBase(BaseModel):
     font_family: str = "system"
     fill_color: str | None = None
     font_color: str | None = None
+    container_id: int | None = None  # 所属容器节点 (A1)
 
 
 class MindmapNodeCreate(MindmapNodeBase):
@@ -323,6 +327,7 @@ class MindmapNodeUpdate(BaseModel):
     font_family: str | None = None
     fill_color: str | None = None
     font_color: str | None = None
+    container_id: int | None = None  # None 表示移出容器
 
 
 class MindmapNodePosition(BaseModel):
@@ -351,6 +356,7 @@ class MindmapNodeRead(MindmapNodeBase):
     color: str | None = None
     fill_color: str | None = None
     font_color: str | None = None
+    container_id: int | None = None  # A1: 所属容器
     created_at: datetime
     updated_at: datetime
 

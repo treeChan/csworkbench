@@ -259,12 +259,13 @@ class Metric(Base):
 
 
 class Note(Base):
-    """实验的 Markdown 笔记。
+    """实验的笔记。
 
     字段：
         id: 主键
         experiment_id: 所属实验
-        content: Markdown 原文
+        content: 笔记原文
+        format: 渲染格式 — "md"（Markdown）或 "text"（纯文本, 保留换行）
     """
 
     __tablename__ = "notes"
@@ -275,6 +276,7 @@ class Note(Base):
         ForeignKey("experiments.id", ondelete="CASCADE"), index=True
     )
     content: Mapped[str] = mapped_column(Text)
+    format: Mapped[str] = mapped_column(String(10), default="md", server_default="md")
 
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
 
@@ -520,6 +522,14 @@ class MindmapNode(Base):
     fill_color: Mapped[str | None] = mapped_column(String(20), nullable=True)
     font_color: Mapped[str | None] = mapped_column(String(20), nullable=True)
 
+    # A1: 所属容器节点。容器被删除时 (ON DELETE SET NULL) 子节点保留,
+    # 仅解除关系。容器自身不能成为自己的容器 (check 在前端 + API 校验)。
+    container_id: Mapped[int | None] = mapped_column(
+        ForeignKey("mindmap_nodes.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
     updated_at: Mapped[datetime] = mapped_column(
         DateTime, default=datetime.utcnow, onupdate=datetime.utcnow
@@ -537,6 +547,17 @@ class MindmapNode(Base):
         back_populates="parent",
         cascade="all, delete-orphan",
         foreign_keys=[parent_id],
+    )
+    # A1 反向：哪些子节点挂在该容器下 (容器删除时 FK SET NULL 解除关系)
+    container: Mapped["MindmapNode | None"] = relationship(
+        "MindmapNode",
+        remote_side="MindmapNode.id",
+        foreign_keys=[container_id],
+    )
+    contained: Mapped[list["MindmapNode"]] = relationship(
+        "MindmapNode",
+        back_populates="container",
+        foreign_keys=[container_id],
     )
 
     def __repr__(self) -> str:

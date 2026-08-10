@@ -41,6 +41,7 @@ from fastapi.responses import FileResponse, StreamingResponse
 from sqlalchemy.orm import Session
 
 from app import crud, schemas
+from app import models
 from app.config import get_artifact_dir, settings
 from app.database import get_db
 from app.services import settings_service
@@ -893,6 +894,23 @@ def api_sync_mindmap(project_id: int, db: Session = Depends(get_db)):
     return diff
 
 
+def _validate_container(db: Session, node: models.MindmapNode, container_id: int | None) -> None:
+    """A1 容器关系校验: 容器必须存在、属于同一导图、不能是自己、不能是容器 (防止嵌套循环)。"""
+    if container_id is None:
+        return
+    if container_id == node.id:
+        raise HTTPException(400, "节点不能成为自己的容器")
+    container = db.get(models.MindmapNode, container_id)
+    if container is None:
+        raise HTTPException(404, "容器节点不存在")
+    if container.mindmap_id != node.mindmap_id:
+        raise HTTPException(400, "容器必须属于同一导图")
+    if container.shape_type != "container":
+        raise HTTPException(400, "目标不是容器节点 (shape_type != 'container')")
+    if container.container_id is not None:
+        raise HTTPException(400, "容器不能嵌套其他容器 (扁平结构)")
+
+
 @router.post(
     "/projects/{project_id}/mindmap/nodes",
     response_model=schemas.MindmapNodeRead,
@@ -909,6 +927,9 @@ def api_create_mindmap_node(
     mm = crud.get_or_create_mindmap(db, project_id)
     if data.shape_type not in schemas.SHAPE_TYPES:
         raise HTTPException(400, f"不支持的 shape_type: {data.shape_type}")
+    # 容器关系校验: 此时 node.id 还没生成, 用哨兵 -1 防自环即可
+    tmp = models.MindmapNode(id=-1, mindmap_id=mm.id, kind="manual", shape_type=data.shape_type)
+    _validate_container(db, tmp, data.container_id)
     node = crud.create_node(db, mm.id, data)
     return _node_to_read(node)
 
@@ -928,7 +949,12 @@ def api_update_mindmap_node(
         raise HTTPException(404, "MindmapNode not found")
     if data.shape_type is not None and data.shape_type not in schemas.SHAPE_TYPES:
         raise HTTPException(400, f"不支持的 shape_type: {data.shape_type}")
-    crud.update_node(db, node, data)
+    if "container_id" in data.model_dump(exclude_unset=True):
+        _validate_container(db, node, data.container_id)
+    try:
+        crud.update_node(db, node, data)
+    except ValueError as e:
+        raise HTTPException(400, str(e))
     return _node_to_read(node)
 
 

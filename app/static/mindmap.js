@@ -330,6 +330,10 @@
             });
         }
         if (node.shape_type === "text") return null;
+        if (node.shape_type === "container") {
+            // A1 容器: 圆角矩形, CSS class 控制虚线/半透明
+            return svgEl("rect", { width: w, height: h, rx: "10", class: "mm-shape mm-shape-container" });
+        }
         // rect / rounded / sticky-*
         let rx = "4";
         if (node.shape_type === "rounded") rx = "12";
@@ -351,6 +355,7 @@
         if (node.fill_color) attrs["data-fill-color"] = node.fill_color;
         if (node.font_color) attrs["data-font-color"] = node.font_color;
         if (node.parent_id != null) attrs["data-parent"] = String(node.parent_id);
+        if (node.container_id != null) attrs["data-container"] = String(node.container_id);
         attrs["data-z"] = String(node.z_index != null ? node.z_index : 0);
         const g = svgEl("g", attrs);
 
@@ -371,7 +376,23 @@
         if (node.font_size) labelStyleParts.push("font-size:" + node.font_size + "px");
         if (node.font_color) labelStyleParts.push("color:" + node.font_color);
         if (labelStyleParts.length) labelDiv.setAttribute("style", labelStyleParts.join(";"));
-        labelDiv.textContent = node.label || "";
+        // 容器有专用 label: 显示在角落的 "容器" 角标 + 用户 label (可空)
+        if (node.shape_type === "container") {
+            // 角落小角标 (SVG text, 不占 foreignObject, 永远显示)
+            const badge = svgEl("text", {
+                x: 10, y: 16,
+                class: "mm-shape-container-badge",
+                "data-badge": "container",
+            });
+            badge.textContent = "容器";
+            g.appendChild(badge);
+            // 容器内的中心 label (用 foreignObject, 用户可改)
+            labelDiv.textContent = node.label || "拖节点进这里";
+            // 容器节点不响应双击进入编辑模式太深, label 偏小偏淡
+            labelStyleParts.push("font-style:italic");
+        } else {
+            labelDiv.textContent = node.label || "";
+        }
         fo.appendChild(labelDiv);
         g.appendChild(fo);
 
@@ -399,6 +420,7 @@
             "sticky-yellow": { w: 130, h: 100 },
             "sticky-pink": { w: 130, h: 100 },
             "sticky-blue": { w: 130, h: 100 },
+            container: { w: 280, h: 200 },  // A1 容器默认尺寸 (够装 2-3 个子节点)
         };
         const d = defaults[shapeType] || { w: 120, h: 60 };
         const payload = {
@@ -599,6 +621,126 @@
             setSaveState("error");
             showToast("更新失败：" + e.message, "error");
         }
+    }
+
+    // ---- A1 容器节点辅助 ----
+    // 取一个节点当前的 (x, y, w, h)
+    function _getRectOfNode(el) {
+        const t = el.getAttribute("transform") || "";
+        const m = t.match(/translate\(([-\d.]+),([-\d.]+)\)/);
+        const x = m ? parseFloat(m[1]) : 0;
+        const y = m ? parseFloat(m[2]) : 0;
+        const w = parseFloat(el.getAttribute("data-w") || "120");
+        const h = parseFloat(el.getAttribute("data-h") || "60");
+        return { x: x, y: y, w: w, h: h };
+    }
+    // 矩形 a 是否完整包含矩形 b (中心点落入 + b 完全在 a 内)
+    function _rectContains(outer, inner) {
+        const icx = inner.x + inner.w / 2;
+        const icy = inner.y + inner.h / 2;
+        return (
+            icx >= outer.x && icx <= outer.x + outer.w &&
+            icy >= outer.y && icy <= outer.y + outer.h &&
+            inner.x >= outer.x && inner.x + inner.w <= outer.x + outer.w &&
+            inner.y >= outer.y && inner.y + inner.h <= outer.y + outer.h
+        );
+    }
+    // 拖完自动检测: 找包含每个非容器节点中心点的最上层容器 (z_index 大的优先)
+    function autoDetectContainerOnDrop(items) {
+        if (!items || !items.length) return;
+        // 缓存所有容器矩形
+        const containers = [];
+        nodeById.forEach(function (el, id) {
+            if (el.getAttribute("data-shape") === "container") {
+                const r = _getRectOfNode(el);
+                r.el = el;
+                r.id = id;
+                r.z = parseInt(el.getAttribute("data-z") || "0", 10);
+                containers.push(r);
+            }
+        });
+        if (!containers.length) return;
+        // 按 z_index 升序, 最后一个就是最上层
+        containers.sort(function (a, b) { return a.z - b.z; });
+        items.forEach(function (it) {
+            if (it.shape === "container") return;  // 容器自己不入容器
+            const r = _getRectOfNode(it.el);
+            // 跳过纯容器子节点 (已跟随容器移动, 它们的 container_id 不需要变)
+            if (it.childOf != null) return;
+            // 找到最上层容器 (倒序找第一个完整包含的)
+            let target = null;
+            for (let i = containers.length - 1; i >= 0; i--) {
+                if (_rectContains(containers[i], r)) { target = containers[i]; break; }
+            }
+            const curContainerId = it.el.getAttribute("data-container");
+            const curId = curContainerId ? parseInt(curContainerId, 10) : null;
+            const tgtId = target ? target.id : null;
+            if (curId === tgtId) return;  // 没变
+            // 调用 API 更新 (不阻塞, 失败 toast)
+            setNodeContainer(it.id, tgtId);
+        });
+    }
+    // 手动 / 自动: 设置某节点的 container_id (null 表示移出)
+    async function setNodeContainer(nodeId, containerId) {
+        try {
+            await api("/api/mindmap/nodes/" + nodeId, {
+                method: "PATCH",
+                body: { container_id: containerId },
+            });
+            const el = $node(nodeId);
+            if (el) {
+                if (containerId != null) el.setAttribute("data-container", String(containerId));
+                else el.removeAttribute("data-container");
+            }
+            if (containerId != null) {
+                showToast("已加入容器 #" + containerId);
+            }
+        } catch (e) {
+            console.error(e);
+            showToast("容器归属失败：" + e.message, "error");
+        }
+    }
+    // 手动命令: 把当前选中的多个节点加入指定容器 (用户从工具栏按按钮后再点容器)
+    let pendingContainerTarget = null;  // null = 不在 "等待点容器" 模式
+    function startPickContainerForSelection() {
+        if (selectedNodes.size === 0) {
+            showToast("请先选中要加入容器的节点", "error");
+            return;
+        }
+        // 排除容器自身
+        let hasNonContainer = false;
+        selectedNodes.forEach(function (el) {
+            if (el.getAttribute("data-shape") !== "container") hasNonContainer = true;
+        });
+        if (!hasNonContainer) {
+            showToast("选中的都是容器，请选至少一个普通节点", "error");
+            return;
+        }
+        pendingContainerTarget = "pick";
+        showToast("点选目标容器 (Esc 取消)", "info");
+        document.body.classList.add("mm-pick-container");
+    }
+    function cancelPickContainer() {
+        pendingContainerTarget = null;
+        document.body.classList.remove("mm-pick-container");
+    }
+    // 节点 mousedown 检测: 如果在 pick 模式, 处理后拦截默认
+    function tryHandlePickContainer(el) {
+        if (pendingContainerTarget !== "pick") return false;
+        if (el.getAttribute("data-shape") !== "container") {
+            showToast("请点选一个容器节点 (虚线紫色框)", "error");
+            return false;  // 不取消, 让用户继续点
+        }
+        const targetId = parseInt(el.getAttribute("data-id"), 10);
+        const ids = [];
+        selectedNodes.forEach(function (e) {
+            if (e.getAttribute("data-shape") !== "container") {
+                ids.push(parseInt(e.getAttribute("data-id"), 10));
+            }
+        });
+        ids.forEach(function (id) { setNodeContainer(id, targetId); });
+        cancelPickContainer();
+        return true;
     }
 
     // ---- toast ----
@@ -1088,6 +1230,9 @@
 
             e.stopPropagation();
 
+            // A1: 容器拾取模式 - 处理后拦截默认拖拽逻辑
+            if (tryHandlePickContainer(el)) return;
+
             if (e.shiftKey) {
                 // Shift+点击 → 多选切换
                 selectNode(el, { additive: true });
@@ -1104,19 +1249,47 @@
 
             // 记录每个选中节点的 origX/origY, 一起拖
             const dragItems = [];
+            const dragIds = new Set();
             selectedNodes.forEach(function (n) {
                 const t = n.getAttribute("transform") || "";
                 const m = t.match(/translate\(([-\d.]+),([-\d.]+)\)/);
                 const ox = m ? parseFloat(m[1]) : 0;
                 const oy = m ? parseFloat(m[2]) : 0;
+                const id = parseInt(n.getAttribute("data-id"), 10);
                 dragItems.push({
                     el: n,
-                    id: parseInt(n.getAttribute("data-id"), 10),
+                    id: id,
                     origX: ox,
                     origY: oy,
                     kind: n.getAttribute("data-kind"),
+                    shape: n.getAttribute("data-shape"),
                 });
+                dragIds.add(id);
             });
+            // A1: 如果选中节点里有容器, 把它的子节点也加入拖拽 (一起移动)
+            // 容器自身的容器归属已经持久化, 不需要特殊处理
+            for (const it of dragItems) {
+                if (it.shape === "container") {
+                    nodeById.forEach(function (other, oid) {
+                        if (dragIds.has(oid)) return;  // 已选
+                        const oc = other.getAttribute("data-container");
+                        if (oc && parseInt(oc, 10) === it.id) {
+                            const t = other.getAttribute("transform") || "";
+                            const m = t.match(/translate\(([-\d.]+),([-\d.]+)\)/);
+                            dragItems.push({
+                                el: other,
+                                id: oid,
+                                origX: m ? parseFloat(m[1]) : 0,
+                                origY: m ? parseFloat(m[2]) : 0,
+                                kind: other.getAttribute("data-kind"),
+                                shape: other.getAttribute("data-shape"),
+                                childOf: it.id,  // 标记是跟随容器移动的
+                            });
+                            dragIds.add(oid);
+                        }
+                    });
+                }
+            }
 
             dragState = {
                 items: dragItems,
@@ -1147,6 +1320,8 @@
                 document.removeEventListener("mouseup", onUp);
                 if (dragState && dragState.moved) {
                     flushPositions();
+                    // A1 自动检测: 拖完检测非容器节点是否落在某个容器内
+                    autoDetectContainerOnDrop(dragState.items);
                 }
                 dragState = null;
             }
@@ -1385,6 +1560,15 @@
     nodesLayer.querySelectorAll(".mm-node").forEach(attachNodeHandlers);
     edgesLayer.querySelectorAll(".mm-edge.mm-edge-manual").forEach(attachEdgeHandlers);
 
+    // A1: 把容器节点重新插到子节点之前, 这样子节点视觉上画在容器上面
+    // (SVG 按 DOM 顺序绘制, 后插入的在上面)
+    (function reorderContainersToBack() {
+        const containers = Array.from(nodesLayer.querySelectorAll(".mm-node.shape-container"));
+        containers.forEach(function (c) {
+            nodesLayer.insertBefore(c, nodesLayer.firstChild);
+        });
+    })();
+
     // ---- 给节点标记 data-parent（拖拽重绘连线用） ----
     nodesLayer.querySelectorAll(".mm-node").forEach(function (el) {
         const id = parseInt(el.getAttribute("data-id"), 10);
@@ -1554,6 +1738,25 @@
                 toDelete.forEach(deleteNode);
             } else if (btn.id === "mm-font-inc" || btn.id === "mm-font-dec" || btn.id === "mm-font-reset") {
                 changeFontSize(btn.id === "mm-font-inc" ? +FONT_STEP : btn.id === "mm-font-dec" ? -FONT_STEP : 0);
+            } else if (btn.id === "mm-pick-container-btn") {
+                // A1: 进入 "选节点→点容器" 模式
+                startPickContainerForSelection();
+            } else if (btn.id === "mm-ungroup-btn") {
+                // A1: 选中节点批量移出所在容器
+                if (selectedNodes.size === 0) {
+                    showToast("请先选中要移出容器的节点", "error");
+                    return;
+                }
+                let count = 0;
+                selectedNodes.forEach(function (el) {
+                    if (el.getAttribute("data-container")) {
+                        const id = parseInt(el.getAttribute("data-id"), 10);
+                        setNodeContainer(id, null);
+                        count++;
+                    }
+                });
+                if (count === 0) showToast("选中的节点都不在容器里", "info");
+                else showToast("已移出 " + count + " 个节点");
             }
         });
     }
@@ -1755,6 +1958,7 @@
             return;
         }
         if (e.key === "Escape") {
+            if (pendingContainerTarget) { cancelPickContainer(); return; }
             if (selectedEdge) { clearEdgeSelection(); return; }
             if (selectedNode) { clearSelection(); return; }
         }
