@@ -48,7 +48,7 @@ TEMPLATES_DIR = BASE_DIR / "templates"
 
 # 静态资源缓存版本号：改 style.css / base.html 内嵌样式后 bump 此值，
 # 浏览器强制重新下载（对应 base.html 的 style.css?v={{ style_version }}）
-STYLE_VERSION = "20260810d"
+STYLE_VERSION = "20260810e"
 
 templates = Jinja2Templates(directory=str(TEMPLATES_DIR))
 
@@ -1284,25 +1284,31 @@ def _render_mindmap_node(node) -> str:
 
     # 形状部分
     shape_svg = ""
+    # 自定义填色 → inline style 覆盖 CSS class (.mm-node.kind-* .mm-shape) 的 fill 规则
+    # 否则 CSS 优先级 (0,0,2,0) > data-* 属性 (无 styling), 自定义色不生效
+    fill_style = ""
+    if getattr(node, "fill_color", None):
+        from xml.sax.saxutils import escape as xml_escape
+        fill_style = f' style="fill:{xml_escape(node.fill_color)}"'
     if node.shape_type == "ellipse":
         rx, ry = w / 2, h / 2
-        shape_svg = f'<ellipse cx="{rx}" cy="{ry}" rx="{rx}" ry="{ry}" class="mm-shape"/>'
+        shape_svg = f'<ellipse cx="{rx}" cy="{ry}" rx="{rx}" ry="{ry}" class="mm-shape"{fill_style}/>'
     elif node.shape_type == "diamond":
         shape_svg = (
-            f'<polygon points="{w/2},0 {w},{h/2} {w/2},{h} 0,{h/2}" class="mm-shape"/>'
+            f'<polygon points="{w/2},0 {w},{h/2} {w/2},{h} 0,{h/2}" class="mm-shape"{fill_style}/>'
         )
     elif node.shape_type == "hexagon":
         # 六边形（左右各切一个角）
         cut = min(20.0, w / 4)
         shape_svg = (
             f'<polygon points="{cut},0 {w-cut},0 {w},{h/2} {w-cut},{h} {cut},{h} 0,{h/2}" '
-            f'class="mm-shape"/>'
+            f'class="mm-shape"{fill_style}/>'
         )
     elif node.shape_type == "arrow":
         # 箭头形（五边形）
         shape_svg = (
             f'<polygon points="0,{h*0.3} {w*0.7},{h*0.3} {w*0.7},0 {w},{h/2} '
-            f'{w*0.7},{h} {w*0.7},{h*0.7} 0,{h*0.7}" class="mm-shape"/>'
+            f'{w*0.7},{h} {w*0.7},{h*0.7} 0,{h*0.7}" class="mm-shape"{fill_style}/>'
         )
     elif node.shape_type == "text":
         # 纯文本框：无背景
@@ -1312,7 +1318,7 @@ def _render_mindmap_node(node) -> str:
         rx = "12" if node.shape_type == "rounded" else "4"
         if node.shape_type.startswith("sticky-"):
             rx = "6"
-        shape_svg = f'<rect width="{w}" height="{h}" rx="{rx}" class="mm-shape"/>'
+        shape_svg = f'<rect width="{w}" height="{h}" rx="{rx}" class="mm-shape"{fill_style}/>'
 
     # 文字部分（foreignObject 支持多行 + 居中）
     font_size = int(getattr(node, "font_size", 13) or 13)

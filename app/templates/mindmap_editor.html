@@ -76,9 +76,6 @@
         </div>
 
         <div class="mm-toolbar-sep"></div>
-        <button id="mm-link-btn" class="mm-tb-btn" title="进入连线模式 (L)：再点两个节点完成连线">🔗 连线</button>
-
-        <div class="mm-toolbar-sep"></div>
         <div class="mm-toolbar-group">
             <span class="mm-toolbar-label">填色</span>
             <input type="color" id="mm-fill-color" class="mm-color-input" value="#ffffff"
@@ -99,7 +96,7 @@
 
         <span class="mm-toolbar-hint">
             双击编辑 · <kbd>Shift+点击</kbd>加选 · 空白拖拽框选 · <kbd>Ctrl+A</kbd>全选 ·
-            <kbd>Del</kbd>删除 · <kbd>Ctrl±</kbd>字号 · <kbd>Ctrl+Z</kbd>撤销
+            <kbd>Del</kbd>删除 · 选中节点拖锚点或再点另一节点连边 · <kbd>Ctrl±</kbd>字号 · <kbd>Ctrl+Z</kbd>撤销
         </span>
     </div>
 
@@ -156,11 +153,7 @@
     <!-- 自动同步提示 toast -->
     <div id="mm-toast" class="mm-toast" hidden></div>
 
-    <!-- 连线模式顶部提示条 (JS 控制显隐) -->
-    <div id="mm-link-banner" class="mm-link-banner" hidden>
-        🔗 <strong>连线模式</strong> · 点两个节点完成连线 ·
-        <kbd>Esc</kbd> 退出
-    </div>
+    <!-- 选中节点时 4 个锚点自动显示, 拖出或再点另一个节点连边 -->
 </div>
 
 <!-- 同步状态注入到 JS 用 -->
@@ -173,7 +166,7 @@ window.MM_BOOT = {
     syncDiff: {{ sync_diff | tojson }}
 };
 </script>
-<script src="/static/mindmap.js?v=1786400001" defer></script>
+<script src="/static/mindmap.js?v=1786500001" defer></script>
 {% endblock %}
 
 {% block scripts %}{% endblock %}

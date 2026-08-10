@@ -26,7 +26,6 @@
     const syncBtn = document.getElementById("mm-sync-btn");
     const undoBtn = document.getElementById("mm-undo-btn");
     const redoBtn = document.getElementById("mm-redo-btn");
-    const linkBtn = document.getElementById("mm-link-btn");
 
     // 状态
     let selectedNode = null;          // 主选中 (兼容旧代码)
@@ -37,7 +36,6 @@
     let marqueeRect = null;           // SVG <rect> 元素
     let clipboard = null; // 复制的节点数据（不含 id）
     let dragState = null;
-    let linkMode = null; // { sourceId, sourceNodeEl } | null
     let saveTimer = null;
     let pendingPositions = {}; // 拖拽中累积待保存的位置
     let nodeById = new Map(); // id → DOM 元素
@@ -657,9 +655,10 @@
     function renderAnchors() {
         if (!anchorsLayer) return;
         anchorsLayer.textContent = "";
-        // 锚点只在「连线模式」显示 (避免多选时一堆锚点散落)
-        if (!linkMode) return;
+        // 锚点只在选中唯一节点时显示 (多选/边选中时隐藏, 避免散落)
         if (!selectedNode) return;
+        if (selectedNodes.size > 1) return;
+        if (selectedEdge) return;
         const t = selectedNode.getAttribute("transform") || "";
         const m = t.match(/translate\(([-\d.]+),([-\d.]+)\)/);
         const x = m ? parseFloat(m[1]) : 0;
@@ -1074,48 +1073,19 @@
     }
 
     // ===================================================================
-    // 连线模式（toolbar 🔗 按钮）：第一次点 = source，第二次点 = target
+    // 自动连接：选中唯一节点时, 再点另一个节点自动连边 (无需进连线模式)
+    // 拖锚点拖到目标节点上也是 connectEdge 入口, 两条路径共用 tryConnect()
     // ===================================================================
-    function enterLinkMode() {
-        if (linkMode) return;
-        linkMode = { sourceId: null, sourceNodeEl: null };
-        document.body.classList.add("mm-link-mode");
-        if (linkBtn) linkBtn.classList.add("mm-active");
-        // 顶部 banner 提示
-        const banner = document.getElementById("mm-link-banner");
-        if (banner) banner.hidden = false;
-        // 进入连线模式: 如果有选中节点, 立即把它的锚点画出来 (否则要等下次点节点才显示)
-        renderAnchors();
-        showToast("连线模式：点第一个节点作为起点", "info");
-    }
-    function exitLinkMode() {
-        if (!linkMode) return;
-        linkMode = null;
-        document.body.classList.remove("mm-link-mode");
-        if (linkBtn) linkBtn.classList.remove("mm-active");
-        // 隐藏 banner
-        const banner = document.getElementById("mm-link-banner");
-        if (banner) banner.hidden = true;
-        // 清空临时连线
-        if (tempEdgeLayer) tempEdgeLayer.textContent = "";
-        // 退出连线模式: 立即清掉锚点
-        renderAnchors();
-    }
-    function handleLinkModeClick(nodeEl) {
-        if (!linkMode) return false;
-        const id = parseInt(nodeEl.getAttribute("data-id"), 10);
-        if (!linkMode.sourceId) {
-            linkMode.sourceId = id;
-            linkMode.sourceNodeEl = nodeEl;
-            selectNode(nodeEl);
-            showToast("已选起点，再点一个节点作为终点", "info");
-        } else {
-            const targetId = id;
-            const sourceId = linkMode.sourceId;
-            exitLinkMode();
-            createEdge(sourceId, targetId, true);
-        }
-        return true; // 表示吞掉了这次点击
+    // 规则: 没按 shift, 之前只有 1 个 selectedNode, 点击的是另一个节点 → 自动连边
+    function tryAutoConnectOnClick(targetEl) {
+        if (!selectedNode) return false;
+        if (selectedNodes.size !== 1) return false;
+        if (selectedNode === targetEl) return false;  // 点自己不算
+        const sourceId = parseInt(selectedNode.getAttribute("data-id"), 10);
+        const targetId = parseInt(targetEl.getAttribute("data-id"), 10);
+        if (sourceId === targetId) return false;
+        createEdge(sourceId, targetId, true);
+        return true;
     }
 
     // ---- 拖拽 ----
@@ -1126,15 +1096,30 @@
             const labelDiv = el.querySelector(".mm-label");
             if (labelDiv && labelDiv.classList.contains("editing")) return;
 
-            // 注意: 即使在 link mode 下也走完整的 selectNode + dragState 流程.
-            // 拖动和连线不冲突. mouseup 时如果没移动过, 才把这次点击当作 link-mode 的"选节点"操作.
+            // 先判断这次点击要不要触发"自动连边": 之前唯一选中了一个节点,
+            // 当前点的是另一个节点 → 自动创建 source → target 边
+            // (Shift+点击 / 点击自己不算)
+            const willAutoConnect = !e.shiftKey
+                && selectedNode
+                && selectedNode !== el
+                && selectedNodes.size === 1;
+
             e.stopPropagation();
 
-            // Shift+点击 → 多选切换
             if (e.shiftKey) {
+                // Shift+点击 → 多选切换
                 selectNode(el, { additive: true });
+            } else if (willAutoConnect) {
+                // 自动连边: 先连, 再让新点击的节点成为 selectedNode
+                // (这样连续点 3 个 = 连两条边, 而不是全连到第一个)
+                tryAutoConnectOnClick(el);
+                selectNode(el);
             } else if (selectedNodes.has(el)) {
-                // 点击已选中的节点 → 保持当前多选状态, 不清空 (Figma 行为)
+                // 点击已选中的唯一节点 → 取消选中, 隐藏锚点
+                if (selectedNodes.size === 1) {
+                    clearSelection();
+                }
+                // 多选状态下点击某个 → 保持当前多选 (Figma 行为)
             } else {
                 // 普通点击: 单选 (清空其他)
                 selectNode(el);
@@ -1161,7 +1146,6 @@
                 startX: e.clientX,
                 startY: e.clientY,
                 moved: false,
-                fromLinkMode: !!linkMode,  // 记录: 是否从 link mode 进入, mouseup 时决定要不要触发连线
             };
 
             function onMove(ev) {
@@ -1184,12 +1168,8 @@
             function onUp() {
                 document.removeEventListener("mousemove", onMove);
                 document.removeEventListener("mouseup", onUp);
-                const ds = dragState;
-                if (ds && ds.moved) {
+                if (dragState && dragState.moved) {
                     flushPositions();
-                } else if (ds && ds.fromLinkMode && linkMode) {
-                    // 没拖动 → 这次 mousedown 视为 link-mode 的"选节点"操作
-                    handleLinkModeClick(el);
                 }
                 dragState = null;
             }
@@ -1572,11 +1552,6 @@
             // 撤销 / 前进
             if (btn.id === "mm-undo-btn") { doUndo(); return; }
             if (btn.id === "mm-redo-btn") { doRedo(); return; }
-            // 连线模式
-            if (btn.id === "mm-link-btn") {
-                if (linkMode) exitLinkMode(); else enterLinkMode();
-                return;
-            }
             // 导出 PNG
             if (btn.id === "mm-export-btn") { exportPNG(); return; }
             const shape = btn.getAttribute("data-shape");
@@ -1802,13 +1777,7 @@
             doRedo();
             return;
         }
-        if (!mod && (e.key === "l" || e.key === "L")) {
-            e.preventDefault();
-            if (linkMode) exitLinkMode(); else enterLinkMode();
-            return;
-        }
         if (e.key === "Escape") {
-            if (linkMode) { exitLinkMode(); return; }
             if (selectedEdge) { clearEdgeSelection(); return; }
             if (selectedNode) { clearSelection(); return; }
         }
