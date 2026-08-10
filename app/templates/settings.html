@@ -17,28 +17,32 @@
 <div class="card settings-card">
     <h3 class="card-title"><svg class="icon"><use href="{{ ICON_SPRITE }}#i-clipboard-list"/></svg>常规</h3>
     <form method="post" action="/settings/general">
-        <div class="form-row">
-            <label>主题</label>
-            <div class="theme-picker" id="theme-picker">
-                <label class="theme-option">
-                    <input type="radio" name="theme" value="system" onchange="wbSetTheme('system')">
-                    跟随系统
-                </label>
-                <label class="theme-option">
-                    <input type="radio" name="theme" value="light" onchange="wbSetTheme('light')">
-                    亮色
-                </label>
-                <label class="theme-option">
-                    <input type="radio" name="theme" value="dark" onchange="wbSetTheme('dark')">
-                    暗色
-                </label>
+        <div class="settings-row">
+            <span class="settings-label">主题</span>
+            <div class="settings-value">
+                <div class="theme-picker" id="theme-picker">
+                    <label class="theme-option">
+                        <input type="radio" name="theme" value="system" onchange="wbSetTheme('system')">
+                        跟随系统
+                    </label>
+                    <label class="theme-option">
+                        <input type="radio" name="theme" value="light" onchange="wbSetTheme('light')">
+                        亮色
+                    </label>
+                    <label class="theme-option">
+                        <input type="radio" name="theme" value="dark" onchange="wbSetTheme('dark')">
+                        暗色
+                    </label>
+                </div>
+                <p class="settings-hint">主题保存在本机浏览器；「跟随系统」会随系统外观自动切换。</p>
             </div>
-            <p class="settings-hint">主题保存在本机浏览器；「跟随系统」会随系统外观自动切换。</p>
         </div>
-        <div class="form-row">
-            <label>每页显示条数</label>
-            <input type="number" name="page_size" min="5" max="200" value="{{ page_size }}">
-            <p class="settings-hint">影响列表页与搜索结果每页展示的数量。</p>
+        <div class="settings-row">
+            <span class="settings-label">每页显示条数</span>
+            <div class="settings-value">
+                <input type="number" name="page_size" min="5" max="200" value="{{ page_size }}">
+                <p class="settings-hint">影响列表页与搜索结果每页展示的数量。</p>
+            </div>
         </div>
         <div class="form-actions">
             <button type="submit" class="btn btn-primary">保存常规设置</button>
@@ -50,24 +54,28 @@
 <div class="card settings-card">
     <h3 class="card-title"><svg class="icon"><use href="{{ ICON_SPRITE }}#i-save"/></svg>数据与存储</h3>
     <form method="post" action="/settings/storage">
-        <div class="form-row">
-            <label>数据文件夹</label>
-            <div class="path-input-row">
-                <input type="text" name="data_dir" id="data_dir" value="{{ data_dir }}" required
-                       placeholder="data">
-                <button type="button" class="btn btn-outline browse-btn" data-target="data_dir">浏览…</button>
+        <div class="settings-row">
+            <span class="settings-label">数据文件夹</span>
+            <div class="settings-value">
+                <div class="path-input-row">
+                    <input type="text" name="data_dir" id="data_dir" value="{{ data_dir }}" required
+                           placeholder="data">
+                    <button type="button" class="btn btn-outline browse-btn" data-target="data_dir">浏览…</button>
+                </div>
+                <p class="settings-hint">
+                    所有数据都放在这一个文件夹下：数据库保存为其中的 workbench.db 文件，
+                    上传文件保存在其下的 artifacts 子目录。支持相对路径、绝对路径、~ 家目录。
+                    修改后自动迁移：先复制并校验完整性、再切换、成功后删除旧位置；任一步失败自动回滚。
+                    老版本若数据库与上传目录分开放，本次启动已自动统一到此文件夹。
+                </p>
             </div>
-            <p class="settings-hint">
-                所有数据都放在这一个文件夹下：数据库保存为其中的 workbench.db 文件，
-                上传文件保存在其下的 artifacts 子目录。支持相对路径、绝对路径、~ 家目录。
-                修改后自动迁移：先复制并校验完整性、再切换、成功后删除旧位置；任一步失败自动回滚。
-                老版本若数据库与上传目录分开放，本次启动已自动统一到此文件夹。
-            </p>
         </div>
-        <div class="form-row">
-            <label>单个上传文件上限（MB）</label>
-            <input type="number" name="max_upload_size_mb" min="1" max="2048"
-                   value="{{ max_upload_size_mb }}">
+        <div class="settings-row">
+            <span class="settings-label">单个上传文件上限（MB）</span>
+            <div class="settings-value">
+                <input type="number" name="max_upload_size_mb" min="1" max="2048"
+                       value="{{ max_upload_size_mb }}">
+            </div>
         </div>
         <div class="form-actions">
             <button type="submit" class="btn btn-primary">保存存储设置</button>
@@ -80,13 +88,15 @@
     <h4 class="card-subtitle"><svg class="icon"><use href="{{ ICON_SPRITE }}#i-inbox"/></svg> 恢复备份（一键导入 / 跨电脑迁移）</h4>
     <form method="post" action="/settings/restore" enctype="multipart/form-data"
           onsubmit="return confirm('恢复将覆盖当前所有数据（数据库、上传文件、配置），且不可撤销。确定继续？');">
-        <div class="form-row">
-            <label>选择备份文件（.zip）</label>
-            <input type="file" name="backup" accept=".zip,application/zip" required>
-            <p class="settings-hint">
-                上传另一台机器「下载完整备份」得到的 zip，即可把全部数据一键恢复到这台机器。
-                恢复目标是本机当前设置的路径；恢复前自动备份当前数据，任一步失败自动回滚。
-            </p>
+        <div class="settings-row">
+            <span class="settings-label">选择备份文件（.zip）</span>
+            <div class="settings-value">
+                <input type="file" name="backup" accept=".zip,application/zip" required>
+                <p class="settings-hint">
+                    上传另一台机器「下载完整备份」得到的 zip，即可把全部数据一键恢复到这台机器。
+                    恢复目标是本机当前设置的路径；恢复前自动备份当前数据，任一步失败自动回滚。
+                </p>
+            </div>
         </div>
         <div class="form-actions">
             <button type="submit" class="btn btn-danger">恢复数据</button>
@@ -97,59 +107,75 @@
 <!-- 关于 -->
 <div class="card settings-card">
     <h3 class="card-title"><svg class="icon"><use href="{{ ICON_SPRITE }}#i-info"/></svg>关于</h3>
-    <table class="about-table">
-        <tr><td>应用名称</td><td>{{ app_name }}</td></tr>
-        <tr><td>版本</td><td><span class="about-version-cell">v{{ version }} <button type="button" class="btn btn-outline btn-sm update-check-btn">检查更新</button></span></td></tr>
-        <tr class="update-channel-row">
-            <td>自动检查更新</td>
-            <td>
-                <label class="switch">
-                    <input type="checkbox" id="auto-check-updates">
-                    <span class="switch-track" aria-hidden="true"></span>
-                    <span class="switch-label">打开软件时后台检查更新</span>
-                </label>
-                <p class="settings-hint">
-                    开启后每次启动自动扫描更新仓库，有新版本会弹出提示；关闭后只在点
-                    「检查更新」时手动检查。
-                </p>
-            </td>
-        </tr>
-        <tr class="update-channel-row">
-            <td>更新渠道</td>
-            <td>
-                <label class="switch">
-                    <input type="checkbox" id="update-channel-preview">
-                    <span class="switch-track" aria-hidden="true"></span>
-                    <span class="switch-label">加入预览计划（接收预览版更新）</span>
-                </label>
-                <p class="settings-hint">
-                    默认只接收正式版更新；加入预览计划后同时接收预览版与正式版更新
-                    （提前体验新功能）。随时可退出，退出后回到正式版渠道。
-                </p>
-            </td>
-        </tr>
-        <tr><td>开发者</td><td><a href="https://github.com/treeChan/csworkbench" target="_blank" rel="noopener">{{ authors }}</a></td></tr>
-        <tr><td>开源协议</td><td><a href="https://www.mozilla.org/en-US/MPL/2.0/" target="_blank" rel="noopener">Mozilla Public License 2.0（{{ license }}）</a></td></tr>
-        <tr><td>数据库路径</td><td><code>{{ db_health.db_path }}</code></td></tr>
-        <tr>
-            <td>数据库大小</td>
-            <td>
-                {% if db_health.db_size_bytes > 0 %}
-                {{ "%.1f"|format(db_health.db_size_bytes / 1024 / 1024) }} MB
-                {% else %}—{% endif %}
-            </td>
-        </tr>
-        <tr>
-            <td>数据库健康</td>
-            <td>
-                {% if db_health.status == 'ok' %}
-                <span class="status-ok">● 正常（integrity_check 通过）</span>
-                {% else %}
-                <span class="status-error"><svg class="icon"><use href="{{ ICON_SPRITE }}#i-alert-triangle"/></svg> 异常：{{ db_health.integrity }}</span>
-                {% endif %}
-            </td>
-        </tr>
-    </table>
+    <div class="settings-row">
+        <span class="settings-label">应用名称</span>
+        <div class="settings-value">{{ app_name }}</div>
+    </div>
+    <div class="settings-row">
+        <span class="settings-label">版本</span>
+        <div class="settings-value">
+            <span class="about-version-cell">v{{ version }} <button type="button" class="btn btn-outline btn-sm update-check-btn">检查更新</button></span>
+            <p class="settings-hint">检查 / 下载更新需要访问 GitHub。若提示检查失败或下载不动，请先启用代理软件；建议在代理软件中开启 <strong>TUN 模式</strong>，让桌面应用也走代理。</p>
+        </div>
+    </div>
+    <div class="settings-row update-channel-row">
+        <span class="settings-label">自动检查更新</span>
+        <div class="settings-value">
+            <label class="switch">
+                <input type="checkbox" id="auto-check-updates">
+                <span class="switch-track" aria-hidden="true"></span>
+                <span class="switch-label">打开软件时后台检查更新</span>
+            </label>
+            <p class="settings-hint">
+                开启后每次启动自动扫描更新仓库，有新版本会弹出提示；关闭后只在点
+                「检查更新」时手动检查。
+            </p>
+        </div>
+    </div>
+    <div class="settings-row update-channel-row">
+        <span class="settings-label">更新渠道</span>
+        <div class="settings-value">
+            <label class="switch">
+                <input type="checkbox" id="update-channel-preview">
+                <span class="switch-track" aria-hidden="true"></span>
+                <span class="switch-label">加入预览计划（接收预览版更新）</span>
+            </label>
+            <p class="settings-hint">
+                默认只接收正式版更新；加入预览计划后同时接收预览版与正式版更新
+                （提前体验新功能）。随时可退出，退出后回到正式版渠道。
+            </p>
+        </div>
+    </div>
+    <div class="settings-row">
+        <span class="settings-label">开发者</span>
+        <div class="settings-value"><a href="https://github.com/treeChan/csworkbench" target="_blank" rel="noopener">{{ authors }}</a></div>
+    </div>
+    <div class="settings-row">
+        <span class="settings-label">开源协议</span>
+        <div class="settings-value"><a href="https://www.mozilla.org/en-US/MPL/2.0/" target="_blank" rel="noopener">Mozilla Public License 2.0（{{ license }}）</a></div>
+    </div>
+    <div class="settings-row">
+        <span class="settings-label">数据库路径</span>
+        <div class="settings-value"><code>{{ db_health.db_path }}</code></div>
+    </div>
+    <div class="settings-row">
+        <span class="settings-label">数据库大小</span>
+        <div class="settings-value">
+            {% if db_health.db_size_bytes > 0 %}
+            {{ "%.1f"|format(db_health.db_size_bytes / 1024 / 1024) }} MB
+            {% else %}—{% endif %}
+        </div>
+    </div>
+    <div class="settings-row">
+        <span class="settings-label">数据库健康</span>
+        <div class="settings-value">
+            {% if db_health.status == 'ok' %}
+            <span class="status-ok">● 正常（integrity_check 通过）</span>
+            {% else %}
+            <span class="status-error"><svg class="icon"><use href="{{ ICON_SPRITE }}#i-alert-triangle"/></svg> 异常：{{ db_health.integrity }}</span>
+            {% endif %}
+        </div>
+    </div>
     <!-- 更新下载进度条（桌面版检查更新时显示，平时隐藏） -->
     <div class="update-progress" id="update-progress" hidden>
         <div class="update-progress-bar">
