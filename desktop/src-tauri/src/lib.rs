@@ -11,11 +11,15 @@ use tauri_plugin_updater::{Update, UpdaterExt};
 
 /// 更新下载进度事件 payload（发给前端展示进度条）。
 /// current / total 为已下载字节与总字节（total 可能未知为 0）。
+/// speed_bytes_per_sec 为当前下载速度（字节/秒，0 = 未知）；
+/// eta_secs 为预计剩余秒数（None = 速度未知无法估算）。
 #[derive(Clone, Serialize)]
 struct UpdateProgress {
     current: u64,
     total: u64,
     percent: f32,
+    speed_bytes_per_sec: f64,
+    eta_secs: Option<u64>,
 }
 
 /// 检查到的新版本（emit 给前端统一弹窗展示）。
@@ -227,15 +231,39 @@ async fn install_update(app: tauri::AppHandle, channel: Option<String>) -> Resul
         // 进度回调：累计已下载字节 → 广播给前端（弹窗进度条）。
         let emit = app_emit.clone();
         let mut downloaded: u64 = 0;
+        // 速度/ETA 计算：相邻两次回调的时间差与字节差 → bytes/s → 剩余时间。
+        let mut last_instant = Instant::now();
+        let mut last_bytes: u64 = 0;
+        let mut speed: f64 = 0.0;
         let progress = move |chunk: usize, total: Option<u64>| {
             downloaded += chunk as u64;
+            // 至少间隔 0.3s 才重算一次速度，避免小包抖动量出 0/极大值。
+            let now = Instant::now();
+            let dt = now.duration_since(last_instant).as_secs_f64();
+            if dt >= 0.3 {
+                let d = downloaded.saturating_sub(last_bytes) as f64;
+                speed = d / dt;
+                last_bytes = downloaded;
+                last_instant = now;
+            }
             let (total, percent) = match total {
                 Some(t) if t > 0 => (t, (downloaded as f32 / t as f32) * 100.0),
                 _ => (0, 0.0),
             };
+            let eta_secs = if total > downloaded && speed > 0.0 {
+                Some(((total - downloaded) as f64 / speed).ceil() as u64)
+            } else {
+                None
+            };
             let _ = emit.emit(
                 "update://download-progress",
-                UpdateProgress { current: downloaded, total, percent },
+                UpdateProgress {
+                    current: downloaded,
+                    total,
+                    percent,
+                    speed_bytes_per_sec: speed,
+                    eta_secs,
+                },
             );
         };
         // 下载（插件内部完成签名校验）。失败 → 广播错误 + 清空任务槽。

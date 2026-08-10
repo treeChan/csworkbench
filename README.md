@@ -369,7 +369,7 @@ workbench/
 **改版本号只改一处**：根目录 `VERSION` 文件（唯一来源）。改完 `npm run tauri build` 或推送
 CI 时会自动同步到 Cargo.toml / package.json / config.py；也可以直接
 `python scripts/sync_version.py 0.4.5` 一步完成。版本号命名规则（主/次/修订、预览版
-`MDHHNN`、正式版 `v*` tag / 预览版固定 `preview` tag）见 [docs/versioning.md](docs/versioning.md)。
+`MMDDHHMM`、正式版 `v*` tag / 预览版固定 `preview` tag）见 [docs/versioning.md](docs/versioning.md)。
 
 `--dev` 会开启 uvicorn 的自动重载，改完 `.py` 文件不用手动重启。
 （不加这个参数时不会重载，改了 Python 代码需要 `Ctrl+C` 后重新启动。

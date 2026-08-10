@@ -549,7 +549,20 @@ function selectQuickType(btn) {
         var p = e && e.payload;
         if (p && p.version) openModal(p);
     });
-    // 下载进度 → 弹窗进度条
+    // 下载进度 → 弹窗进度条（进度 + 已下载/总大小 + 速度 + 预计剩余时间）
+    function fmtSpeed(bps) {
+        if (!bps || bps <= 0) return "";
+        if (bps >= 1048576) return (bps / 1048576).toFixed(1) + " MB/s";
+        return Math.round(bps / 1024) + " KB/s";
+    }
+    function fmtEta(secs) {
+        if (secs == null || secs < 0) return "";
+        if (secs < 60) return "剩余 " + secs + " 秒";
+        var m = Math.floor(secs / 60), s = secs % 60;
+        if (m < 60) return "剩余 " + m + " 分" + (s ? " " + s + " 秒" : "");
+        var h = Math.floor(m / 60); m = m % 60;
+        return "剩余 " + h + " 时" + (m ? " " + m + " 分" : "");
+    }
     listen("update://download-progress", function (e) {
         var p = e && e.payload; if (!p) return;
         progWrap.hidden = false;
@@ -558,7 +571,13 @@ function selectQuickType(btn) {
         if (total > 0) {
             var mb = (total / 1048576).toFixed(1);
             var cur = (p.current / 1048576).toFixed(1);
-            setProgress(pct, "正在下载更新… " + pct + "%（" + cur + " / " + mb + " MB）");
+            var extra = [];
+            var spd = fmtSpeed(p.speed_bytes_per_sec);
+            if (spd) extra.push(spd);
+            var eta = fmtEta(p.eta_secs);
+            if (eta) extra.push(eta);
+            var tail = extra.length ? "，" + extra.join("，") : "";
+            setProgress(pct, "正在下载更新… " + pct + "%（" + cur + " / " + mb + " MB" + tail + "）");
         } else {
             setProgress(0, "正在下载更新…（等待服务器响应）");
         }
