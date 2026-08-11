@@ -176,13 +176,6 @@
             {% endif %}
         </div>
     </div>
-    <!-- 更新下载进度条（桌面版检查更新时显示，平时隐藏） -->
-    <div class="update-progress" id="update-progress" hidden>
-        <div class="update-progress-bar">
-            <div class="update-progress-fill" id="update-progress-fill"></div>
-        </div>
-        <div class="update-progress-text" id="update-progress-text">准备下载…</div>
-    </div>
 </div>
 {% endblock %}
 
@@ -228,69 +221,7 @@
     var previewChk = document.getElementById("update-channel-preview");
     var CHANNEL_KEY = "wb-update-channel";
 
-    // 下载进度条：监听 Rust 侧广播的进度事件（下载中 → 实时百分比，完成 → 提示重启）
-    var progWrap = document.getElementById("update-progress");
-    var progFill = document.getElementById("update-progress-fill");
-    var progText = document.getElementById("update-progress-text");
-    function showProgress() { if (progWrap) progWrap.hidden = false; }
-    function setProgress(pct, text) {
-        if (progFill) progFill.style.width = pct + "%";
-        if (progText) progText.textContent = text;
-    }
-    function listen(name, cb) {
-        try {
-            var evtApi = window.__TAURI__ && window.__TAURI__.event;
-            if (evtApi && evtApi.listen) { evtApi.listen(name, cb); return; }
-        } catch (e) {}
-        // 事件 API 不可用时退化：完成事件无感知，但进度条仍可用
-    }
-    if (progWrap) {
-        // 进度 + 已下载/总大小 + 速度 + 预计剩余时间
-        function fmtSpeed(bps) {
-            if (!bps || bps <= 0) return "";
-            if (bps >= 1048576) return (bps / 1048576).toFixed(1) + " MB/s";
-            return Math.round(bps / 1024) + " KB/s";
-        }
-        function fmtEta(secs) {
-            if (secs == null || secs < 0) return "";
-            if (secs < 60) return "剩余 " + secs + " 秒";
-            var m = Math.floor(secs / 60), s = secs % 60;
-            if (m < 60) return "剩余 " + m + " 分" + (s ? " " + s + " 秒" : "");
-            var h = Math.floor(m / 60); m = m % 60;
-            return "剩余 " + h + " 时" + (m ? " " + m + " 分" : "");
-        }
-        listen("update://download-progress", function (e) {
-            var p = e && e.payload;
-            if (!p) return;
-            var total = p.total || 0;
-            var pct = total > 0 ? Math.round(p.percent || 0) : 0;
-            showProgress();
-            if (total > 0) {
-                var mb = (total / 1048576).toFixed(1);
-                var cur = (p.current / 1048576).toFixed(1);
-                var extra = [];
-                var spd = fmtSpeed(p.speed_bytes_per_sec);
-                if (spd) extra.push(spd);
-                var eta = fmtEta(p.eta_secs);
-                if (eta) extra.push(eta);
-                var tail = extra.length ? "，" + extra.join("，") : "";
-                setProgress(pct, "正在下载更新… " + pct + "%（" + cur + " / " + mb + " MB" + tail + "）");
-            } else {
-                setProgress(0, "正在下载更新…（等待服务器响应）");
-            }
-        });
-        listen("update://download-done", function () {
-            showProgress();
-            setProgress(100, "下载完成，正在安装并重启…");
-        });
-        // 下载失败或用户取消 → 恢复隐藏进度条（下次下载重新出现）。
-        listen("update://download-error", function () {
-            if (progWrap) progWrap.hidden = true;
-        });
-        listen("update://download-cancelled", function () {
-            if (progWrap) progWrap.hidden = true;
-        });
-    }
+    // 下载进度统一由全局弹窗（base.html）展示，最小化后走底部状态栏托盘，设置页不再重复显示进度条。
 
     // 载入时恢复预览计划状态
     if (previewChk) {

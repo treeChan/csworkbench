@@ -159,11 +159,11 @@
 <!-- =================== 底部状态栏 =================== -->
 <footer class="statusbar">
     <span class="status-item"><svg class="icon"><use href="{{ ICON_SPRITE }}#i-rocket"/></svg>Workbench</span>
+    <span class="status-item status-copyright">© 2026 <a href="https://github.com/treeChan/csworkbench" target="_blank" rel="noopener">treeChan &amp; JesseFather</a></span>
     <span class="status-item" id="db-health-status" title="数据库完整性检测中…"><svg class="icon status-db-icon"><use href="{{ ICON_SPRITE }}#i-shield-check"/></svg><span id="db-health-text">● 数据库健康：检测中…</span></span>
-    <span class="status-item status-update-dl" id="status-update-download" title="点击重新打开更新窗口" hidden>
+    <span class="status-item status-update-dl" id="status-update-download" title="点击重新打开更新窗口" hidden style="display:none">
         <svg class="icon"><use href="{{ ICON_SPRITE }}#i-arrow-down"/></svg><span id="status-update-text">正在下载更新…</span>
     </span>
-    <span class="status-item status-copyright">© 2026 <a href="https://github.com/treeChan/csworkbench" target="_blank" rel="noopener">treeChan &amp; JesseFather</a></span>
     <span class="status-right">
         <kbd>Ctrl K</kbd> 搜索 · <kbd>Ctrl N</kbd> 新建
     </span>
@@ -436,6 +436,7 @@ function selectQuickType(btn) {
     var nowBtn = document.getElementById("update-modal-now");
     var statusDl = document.getElementById("status-update-download");
     var statusDlText = document.getElementById("status-update-text");
+    hideStatusbarDl();               // 防御：页面加载即强制隐藏，避免任何样式时序导致闪一下
     var downloading = false;         // 是否正在下载（决定按钮组形态）
 
     // 更新渠道：与设置页「加入预览计划」开关共用 localStorage 记录。
@@ -562,9 +563,13 @@ function selectQuickType(btn) {
         if (isError) { statusDl.classList.add("status-error"); }
         else { statusDl.classList.remove("status-error"); }
         statusDl.hidden = false;
+        statusDl.style.display = "";   // 清空内联隐藏，恢复 .status-item 的 inline-flex 布局
     }
     function hideStatusbarDl() {
-        if (statusDl) statusDl.hidden = true;
+        if (statusDl) {
+            statusDl.hidden = true;
+            statusDl.style.display = "none";   // 内联样式优先级最高，任何渲染时序下都不可见
+        }
     }
     // 从状态栏重新打开弹窗：恢复下载中形态（进度由 progress 事件持续刷新）。
     function restoreDownloading() {
