@@ -33,7 +33,7 @@
             <select name="goal_id" required>
                 {% for g in goals %}
                 <option value="{{ g.id }}"
-                        {% if experiment and experiment.goal_id == g.id %}selected{% endif %}>
+                        {% if (experiment and experiment.goal_id == g.id) or (default_goal_id == g.id) %}selected{% endif %}>
                     {{ g.name }}
                 </option>
                 {% endfor %}

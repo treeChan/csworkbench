@@ -565,16 +565,26 @@ def delete_goal(
 
 @router.get("/projects/{project_id}/experiments/new", response_class=HTMLResponse)
 def new_experiment_form(
-    project_id: int, request: Request, db: Session = Depends(get_db)
+    project_id: int,
+    request: Request,
+    goal_id: int | None = None,  # 从「在此目标下新建实验」链接带过来, 默认选中
+    db: Session = Depends(get_db),
 ) -> HTMLResponse:
     project = crud.get_project(db, project_id)
     if project is None:
         raise HTTPException(404, "Project not found")
     goals = crud.list_goals(db, project_id)
+    # 校验 goal_id 真的属于该项目 (防 URL 篡改成别的项目 goal)
+    default_goal_id = goal_id
+    if default_goal_id is not None:
+        match = next((g for g in goals if g.id == default_goal_id), None)
+        if match is None:
+            default_goal_id = None
     return render(
         request, "experiment_form.html",
         {"project": project, "goals": goals,
-         "experiment": None, "config_md": "", "action": "Create"},
+         "experiment": None, "config_md": "", "action": "Create",
+         "default_goal_id": default_goal_id},
     )
 
 
