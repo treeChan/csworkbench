@@ -1,6 +1,6 @@
 [package]
 name = "csworkbench"
-version = "0.4.5-preview.8111652"
+version = "0.4.5"
 description = "Desktop shell for csworkbench (FastAPI + SQLite research workbench)"
 edition = "2021"
 license = "MPL-2.0"

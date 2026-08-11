@@ -114,6 +114,17 @@ a { color: inherit; text-decoration: none; }
 button { cursor: pointer; font-family: inherit; }
 input, textarea, select { font-family: inherit; font-size: inherit; }
 
+/* 全局滚动条主题化：统一为「细滑轨 + 圆角滑块」，颜色随浅/深主题变量自动适配 */
+::-webkit-scrollbar { width: 10px; height: 10px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb {
+    background: var(--c-border);
+    border-radius: 999px;
+    border: 2px solid var(--c-bg);
+}
+::-webkit-scrollbar-thumb:hover { background: var(--c-text-faint); }
+* { scrollbar-width: thin; scrollbar-color: var(--c-border) transparent; }
+
 /* =================================================================
    顶部栏
    ================================================================= */
@@ -1152,14 +1163,18 @@ button.pipeline-step:focus { outline: 2px solid var(--c-primary-light); outline-
     border-radius: 4px;
     word-break: break-all;
 }
-.settings-row input[type="file"] {
-    width: 100%;
-    padding: 7px 10px;
-    border: 1px solid var(--c-border);
-    border-radius: var(--radius-md);
-    background: var(--c-surface);
-    color: var(--c-text);
-    font-size: var(--fs-base);
+/* 恢复备份文件选择：原生 file input 隐藏、叠在「选择文件…」按钮上触发选择，
+   布局与「数据文件夹」路径行一致（只读文件名 + 按钮），不再出现系统原生白底黑字控件 */
+.file-pick-wrap { position: relative; display: inline-block; flex-shrink: 0; }
+.file-pick-input {
+    position: absolute; inset: 0; width: 100%; height: 100%;
+    opacity: 0; cursor: pointer; font-size: 0;
+}
+.file-name-input { color: var(--c-text-faint); }
+.file-name-input:not(:placeholder-shown) { color: var(--c-text); }
+.file-pick-wrap:focus-within .file-pick-btn {
+    border-color: var(--c-primary);
+    box-shadow: 0 0 0 3px var(--c-primary-bg);
 }
 /* 保存/备份/恢复按钮缩进到值列，与控件同列对齐 */
 .settings-card .form-actions {

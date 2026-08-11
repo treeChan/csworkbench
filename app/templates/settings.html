@@ -91,7 +91,15 @@
         <div class="settings-row">
             <span class="settings-label">选择备份文件（.zip）</span>
             <div class="settings-value">
-                <input type="file" name="backup" accept=".zip,application/zip" required>
+                <div class="path-input-row">
+                    <input type="text" id="backup-file-name" class="file-name-input" readonly
+                           placeholder="未选择备份文件（.zip）">
+                    <span class="file-pick-wrap">
+                        <input type="file" name="backup" accept=".zip,application/zip" required
+                               id="backup-file" class="file-pick-input">
+                        <button type="button" class="btn btn-outline file-pick-btn">选择文件…</button>
+                    </span>
+                </div>
                 <p class="settings-hint">
                     上传另一台机器「下载完整备份」得到的 zip，即可把全部数据一键恢复到这台机器。
                     恢复目标是本机当前设置的路径；恢复前自动备份当前数据，任一步失败自动回滚。
@@ -313,6 +321,19 @@
                 btn.disabled = false;
                 btn.textContent = oldText;
             });
+    });
+})();
+
+/* 恢复备份：原生 file input 隐藏、叠在「选择文件…」按钮上触发选择；
+   选中后把文件名回填到只读框，布局与「数据文件夹」路径行保持一致。 */
+(function () {
+    "use strict";
+    var file = document.getElementById("backup-file");
+    var nameInput = document.getElementById("backup-file-name");
+    if (!file || !nameInput) return;
+    file.addEventListener("change", function () {
+        var f = file.files && file.files[0];
+        nameInput.value = f ? f.name : "";
     });
 })();
 
