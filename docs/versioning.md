@@ -56,7 +56,9 @@ x.y.z-preview.MMDDHHMM
   导致数值变小、检查不到更新」的问题。
 - **为什么这样命名**：让预览版版本号可排序——同一正式版上所有 `-preview.xxx` 都小于其正式版
   `x.y.z`（语义化版本规则），保证用户从预览版升正式版时检测到「更新」，且同一天内多个预览版可区分先后。
-- 预览稳定后：把版本号改回 `x.y.z`，正式发布。
+- 预览稳定后：把版本号改回 `x.y.z`，正式发布，并同时把 `preview` tag 指到正式版
+  commit（见下方「正式版」发布流程），让预览用户也能升到正式版；之后新的预览版
+  （`x.y.z+1-preview.*`）再从正式版出发继续滚动。
 
 ## 打包格式：不使用 MSI
 
@@ -73,7 +75,11 @@ x.y.z-preview.MMDDHHMM
 
 1. `VERSION` 改成 `x.y.z`（如 `0.4.5`）。
 2. 打 tag：`git tag v0.4.5 && git push origin v0.4.5`。
-3. CI 构建三平台安装包，发布正式 Release。
+3. **同步预览渠道**：把 `preview` tag 也指到同一 commit 并 force push——
+   `git tag -f preview && git push origin preview -f`。
+   这样已加入预览计划的用户也会自动收到正式版（`x.y.z` > `x.y.z-preview.*`），
+   无需手动退出预览计划。
+4. CI 构建三平台安装包，发布正式 Release；preview Release 同步更新。
 
 ### 预览版
 
