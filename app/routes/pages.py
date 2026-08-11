@@ -25,6 +25,7 @@ from __future__ import annotations
 import os
 import shutil
 import tempfile
+import time
 from datetime import datetime
 from pathlib import Path
 from urllib.parse import quote
@@ -48,7 +49,7 @@ TEMPLATES_DIR = BASE_DIR / "templates"
 
 # 静态资源缓存版本号：改 style.css / base.html 内嵌样式后 bump 此值，
 # 浏览器强制重新下载（对应 base.html 的 style.css?v={{ style_version }}）
-STYLE_VERSION = "20260811b"
+STYLE_VERSION = "20260811c"
 
 templates = Jinja2Templates(directory=str(TEMPLATES_DIR))
 
@@ -126,6 +127,20 @@ PIPELINE_STAGES: list[tuple[int, str]] = [
 ]
 
 
+# db_health 带缓存注入：integrity_check 在大库上可能较慢，所有页面共用一份
+# 短期缓存结果，避免每次页面加载都重跑检查；设置页仍用自己的实时值覆盖。
+_db_health_cache: dict = {"ts": 0.0, "data": None}
+_DB_HEALTH_CACHE_TTL = 60.0
+
+
+def _cached_db_health() -> dict:
+    now = time.time()
+    if _db_health_cache["data"] is None or now - _db_health_cache["ts"] > _DB_HEALTH_CACHE_TTL:
+        _db_health_cache["data"] = settings_service.get_db_health()
+        _db_health_cache["ts"] = now
+    return _db_health_cache["data"]
+
+
 # 一个便捷函数：渲染模板（统一 request 注入 + 全局上下文）
 def render(
     request: Request, name: str, context: dict | None = None,
@@ -158,6 +173,10 @@ def render(
         "style_version": STYLE_VERSION,
         # 统一图标 sprite 引用（带 cache-busting，与 style.css 同一失效机制）
         "ICON_SPRITE": "/static/icons.svg?v=" + STYLE_VERSION,
+        # 数据库健康（缓存）：让 base.html 状态栏初始即渲染最终状态，
+        # 避免页面加载时「检测中… → 正常」的文字替换造成闪烁。
+        # 设置页传入的实时 db_health 会通过 **ctx_in 覆盖这里的缓存值。
+        "db_health": _cached_db_health(),
         **ctx_in,
         **kwargs,
     }

@@ -160,7 +160,8 @@
 <footer class="statusbar">
     <span class="status-item"><svg class="icon"><use href="{{ ICON_SPRITE }}#i-rocket"/></svg>Workbench</span>
     <span class="status-item status-copyright">© 2026 <a href="https://github.com/treeChan/csworkbench" target="_blank" rel="noopener">treeChan &amp; JesseFather</a></span>
-    <span class="status-item" id="db-health-status" title="数据库完整性检测中…"><svg class="icon status-db-icon"><use href="{{ ICON_SPRITE }}#i-shield-check"/></svg><span id="db-health-text">● 数据库健康：检测中…</span></span>
+    {% set _db_ok = db_health and db_health.status == "ok" %}
+    <span class="status-item {% if _db_ok %}status-ok{% else %}status-error{% endif %}" id="db-health-status" title="{% if _db_ok %}数据库完整性正常（integrity_check 通过）{% elif db_health %}数据库异常：{{ db_health.integrity }}{% else %}数据库完整性检测中…{% endif %}"><svg class="icon status-db-icon"><use href="{{ ICON_SPRITE }}#{% if _db_ok %}i-shield-check{% else %}i-alert-triangle{% endif %}"/></svg><span id="db-health-text">● 数据库健康：{% if _db_ok %}正常{% elif db_health %}异常{% else %}检测中…{% endif %}</span></span>
     <span class="status-item status-update-dl" id="status-update-download" title="点击重新打开更新窗口" hidden style="display:none">
         <svg class="icon"><use href="{{ ICON_SPRITE }}#i-arrow-down"/></svg><span id="status-update-text">正在下载更新…</span>
     </span>
@@ -665,7 +666,12 @@ function selectQuickType(btn) {
     });
 
     // 按钮
-    if (laterBtn) laterBtn.addEventListener("click", closeModal);
+    // 「稍后」：关闭弹窗并复位 shown，允许用户再点「检查更新」时弹窗重新弹出
+    //（与取消/失败路径一致，修复「稍后后再次检查需刷新页面才正常」）。
+    if (laterBtn) laterBtn.addEventListener("click", function () {
+        shown = false;
+        closeModal();
+    });
     // 取消：abort 后台下载任务。状态复位统一由 update://download-cancelled 事件完成；
     // 仅当 invoke 被拒绝（Rust 侧异常）时前端兜底复位，避免与事件重复处理。
     if (cancelBtn) cancelBtn.addEventListener("click", function () {
