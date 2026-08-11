@@ -824,6 +824,9 @@ button.pipeline-step:focus { outline: 2px solid var(--c-primary-light); outline-
     color: var(--c-danger);
     font-weight: 600;
 }
+/* 覆盖 .status-item 的 display:inline-flex：否则 UA 的 [hidden]{display:none} 被
+   class 优先级压掉，下载条即使无更新也常驻显示（见 .update-modal-backdrop[hidden] 同款修复） */
+.status-update-dl[hidden] { display: none; }
 
 /* =================================================================
    面包屑
