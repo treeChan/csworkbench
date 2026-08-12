@@ -18,22 +18,23 @@
    }
 #}
 {% macro render_artifact_tree(tree, scope='global', with_actions=false) -%}
-    {# 递归函数 (用 macro 模拟递归) #}
-    {%- macro render_node(node) -%}
+    {# 递归函数 (用 macro 模拟递归), current_path = 当前节点到根的路径 (不含尾 /) #}
+    {%- macro render_node(node, current_path) -%}
         {# 先按 __order__ 顺序渲染该层级下的文件夹 #}
         {%- for key in node.get('__order__', []) -%}
             {%- if key in node['folders'] -%}
                 {%- set sub = node['folders'][key] -%}
-                <details class="mm-tree-folder" open>
+                {%- set sub_path = (current_path ~ '/' ~ key) if current_path else key -%}
+                <details class="mm-tree-folder" open data-folder-path="{{ sub_path }}">
                     <summary class="mm-tree-folder-head">
                         <svg class="icon"><use href="{{ ICON_SPRITE }}#i-folder"/></svg>
-                        <span class="mm-tree-folder-name">{{ key }}</span>
+                        <span class="mm-tree-folder-name" title="双击改名">{{ key }}</span>
                         <small style="color: var(--c-text-faint); margin-left: 6px;">
                             {{- sub['files']|length }} 项
                         </small>
                     </summary>
                     <div class="mm-tree-folder-body">
-                        {{ render_node(sub) }}
+                        {{ render_node(sub, sub_path) }}
                     </div>
                 </details>
             {%- endif -%}
@@ -44,12 +45,12 @@
                 {%- for a in node['files'] -%}
                     {%- set fname = (a.original_name or '').split('/')[-1] -%}
                     {%- if a.kind == 'image' -%}
-                        <div class="mm-artifact-cell">
+                        <div class="mm-artifact-cell" draggable="true" data-artifact-id="{{ a.id }}">
                             <a href="/api/artifacts/{{ a.id }}/inline"
                                data-lightbox="{{ scope }}"
                                data-title="{{ fname }}"
                                class="mm-artifact-thumb"
-                               title="点击放大预览">
+                               title="点击放大预览 · 拖动到其他文件夹">
                                 <img src="/api/artifacts/{{ a.id }}/inline"
                                      alt="{{ fname }}"
                                      loading="lazy">
@@ -64,10 +65,10 @@
                             {%- endif -%}
                         </div>
                     {%- else -%}
-                        <div class="mm-artifact-cell">
+                        <div class="mm-artifact-cell" draggable="true" data-artifact-id="{{ a.id }}">
                             <a href="/api/artifacts/{{ a.id }}/download"
                                class="mm-artifact-file"
-                               title="下载 {{ fname }}">
+                               title="下载 {{ fname }} · 拖动到其他文件夹">
                                 {%- if a.kind == 'model' -%}
                                     <svg class="icon mm-artifact-icon"><use href="{{ ICON_SPRITE }}#i-brain"/></svg>
                                 {%- else -%}
@@ -90,8 +91,8 @@
         {%- endif -%}
     {%- endmacro -%}
 
-    <div class="mm-artifact-tree" data-scope="{{ scope }}">
-        {{ render_node(tree) }}
+    <div class="mm-artifact-tree" data-scope="{{ scope }}" data-folder-path="">
+        {{ render_node(tree, '') }}
     </div>
 {%- endmacro %}
 

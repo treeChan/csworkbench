@@ -601,6 +601,84 @@ def build_artifact_tree(artifacts, categories: list[str] | None = None) -> dict:
     return tree
 
 
+def move_artifact(db: Session, artifact: models.Artifact, new_folder: str) -> models.Artifact:
+    """C4: 把 artifact 挪到新子目录下, 只改 original_name.
+
+    文件在磁盘上是随机名 (stored_path), 子目录层级只在 original_name 里.
+    new_folder: 新子目录路径, 例 '数据图/loss_curves' 或 '' (根).
+    文件名部分保持不变.
+    """
+    fname = (artifact.original_name or "").split("/")[-1] or artifact.stored_name
+    clean = (new_folder or "").strip().strip("/").replace("..", "").replace("\\", "/")
+    while "//" in clean:
+        clean = clean.replace("//", "/")
+    # 去掉空段 (例如 "a//b" → "a/b")
+    parts = [p for p in clean.split("/") if p]
+    clean = "/".join(parts)
+    artifact.original_name = f"{clean}/{fname}" if clean else fname
+    db.commit()
+    db.refresh(artifact)
+    return artifact
+
+
+def rename_folder(
+    db: Session,
+    *,
+    project_id: int,
+    old_folder: str,
+    new_folder: str,
+) -> int:
+    """C4: 改子目录名 — 把 project 下所有 original_name 以 old_folder/ 开头的
+    artifact 改用 new_folder/. 返回改动行数.
+
+    注: 子目录层级只在 original_name 里, 磁盘文件 (随机名) 不动.
+    包括三种归属: 直接 project / goal (属于本 project) / experiment (属于本 project).
+    """
+    if not old_folder or not new_folder or old_folder == new_folder:
+        return 0
+    # 清洗两边, 防止 ../ 注入
+    def _clean(s: str) -> str:
+        s = (s or "").strip().strip("/").replace("..", "").replace("\\", "/")
+        while "//" in s:
+            s = s.replace("//", "/")
+        return "/".join(p for p in s.split("/") if p)
+    old_clean = _clean(old_folder)
+    new_clean = _clean(new_folder)
+    if not old_clean or not new_clean or old_clean == new_clean:
+        return 0
+
+    # 先拿本 project 下的所有 goal_id / experiment_id
+    goal_ids = list(
+        db.scalars(select(models.Goal.id).where(models.Goal.project_id == project_id)).all()
+    )
+    exp_ids = list(
+        db.scalars(
+            select(models.Experiment.id).where(models.Experiment.project_id == project_id)
+        ).all()
+    )
+
+    # 构造 OR 谓词: 直挂本 project, 或挂在 project 下任一 goal / experiment
+    from sqlalchemy import or_
+    conds = [models.Artifact.project_id == project_id]
+    if goal_ids:
+        conds.append(models.Artifact.goal_id.in_(goal_ids))
+    if exp_ids:
+        conds.append(models.Artifact.experiment_id.in_(exp_ids))
+
+    arts = db.scalars(
+        select(models.Artifact)
+        .where(or_(*conds))
+        .where(models.Artifact.original_name.like(f"{old_clean}/%"))
+    ).all()
+    n = 0
+    for a in arts:
+        a.original_name = new_clean + a.original_name[len(old_clean):]
+        n += 1
+    if n:
+        db.commit()
+    return n
+
+
 def update_artifact(
     db: Session, artifact: models.Artifact, data: schemas.ArtifactUpdate
 ) -> models.Artifact:

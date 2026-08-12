@@ -22,7 +22,7 @@
     <script src="/static/htmx.min.js" defer></script>
     {% block head %}{% endblock %}
 </head>
-<body class="app">
+<body class="app" data-project-id="{{ project.id if project else '' }}">
 
 <!-- =================== 顶部栏 =================== -->
 <header class="topbar">
@@ -778,6 +778,156 @@ function selectQuickType(btn) {
         if (e.key === "Escape") { hide(); }
         else if (e.key === "ArrowLeft") { step(-1); }
         else if (e.key === "ArrowRight") { step(1); }
+    });
+})();
+</script>
+
+<script>
+/* ===== C4: 拖拽 artifact 到别的子目录 + 子目录改名 =====
+   - .mm-artifact-cell[draggable] 拖动源
+   - .mm-tree-folder / .mm-artifact-tree[data-folder-path] 放下目标
+   - 悬停高亮目标; 子目录名双击改名
+*/
+(function () {
+    "use strict";
+
+    function getProjectId() {
+        // 优先从最近的 mm-artifact-tree 拿 data-project-id, 否则退回 body
+        var root = document.querySelector(".mm-artifact-tree[data-project-id]");
+        if (root) return root.getAttribute("data-project-id");
+        var body = document.body;
+        return body.getAttribute("data-project-id") || "";
+    }
+
+    // ---------- 拖拽 ----------
+    var dragArtifactId = null;
+
+    document.addEventListener("dragstart", function (e) {
+        var cell = e.target.closest('.mm-artifact-cell[draggable="true"]');
+        if (!cell) return;
+        dragArtifactId = cell.getAttribute("data-artifact-id");
+        try {
+            e.dataTransfer.setData("text/plain", String(dragArtifactId));
+            e.dataTransfer.effectAllowed = "move";
+        } catch (_) {}
+        cell.classList.add("mm-dragging");
+    });
+
+    document.addEventListener("dragend", function (e) {
+        var cell = e.target.closest('.mm-artifact-cell[draggable="true"]');
+        if (cell) cell.classList.remove("mm-dragging");
+        document.querySelectorAll(".mm-drop-target").forEach(function (el) {
+            el.classList.remove("mm-drop-target");
+        });
+        dragArtifactId = null;
+    });
+
+    function isDropTarget(el) {
+        if (!el) return null;
+        if (el.matches && el.matches('.mm-tree-folder[data-folder-path]')) return el;
+        if (el.matches && el.matches('.mm-artifact-tree[data-folder-path]')) return el;
+        return null;
+    }
+
+    document.addEventListener("dragover", function (e) {
+        var target = isDropTarget(e.target.closest('.mm-tree-folder, .mm-artifact-tree'));
+        if (!target) return;
+        e.preventDefault();
+        e.dataTransfer.dropEffect = "move";
+        // 只高亮当前最近的目标 (避免嵌套时全亮)
+        document.querySelectorAll(".mm-drop-target").forEach(function (el) {
+            if (el !== target) el.classList.remove("mm-drop-target");
+        });
+        target.classList.add("mm-drop-target");
+    });
+
+    document.addEventListener("dragleave", function (e) {
+        var target = e.target.closest('.mm-tree-folder, .mm-artifact-tree');
+        // 拖到子元素上 dragleave 也会触发, 检查 relatedTarget
+        if (target && (!e.relatedTarget || !target.contains(e.relatedTarget))) {
+            target.classList.remove("mm-drop-target");
+        }
+    });
+
+    document.addEventListener("drop", function (e) {
+        var target = e.target.closest('.mm-tree-folder[data-folder-path], .mm-artifact-tree[data-folder-path]');
+        if (!target) return;
+        e.preventDefault();
+        target.classList.remove("mm-drop-target");
+        var aid = dragArtifactId || e.dataTransfer.getData("text/plain");
+        if (!aid) return;
+        var folderPath = target.getAttribute("data-folder-path") || "";
+        var fd = new FormData();
+        fd.append("folder", folderPath);
+        fetch("/api/artifacts/" + encodeURIComponent(aid) + "/move", {
+            method: "POST",
+            body: fd,
+        }).then(function (r) {
+            if (!r.ok) return r.text().then(function (t) { throw new Error(t || ("HTTP " + r.status)); });
+            // 简单起见: 整页刷新, 树重渲染
+            location.reload();
+        }).catch(function (err) {
+            alert("移动失败: " + err.message);
+        });
+    });
+
+    // ---------- 子目录改名 ----------
+    function startRename(span) {
+        if (span.querySelector("input")) return; // already editing
+        var oldName = span.textContent.trim();
+        var input = document.createElement("input");
+        input.type = "text";
+        input.value = oldName;
+        input.className = "mm-rename-input";
+        input.maxLength = 80;
+        span.textContent = "";
+        span.appendChild(input);
+        input.focus();
+        input.select();
+        var done = false;
+        function commit() {
+            if (done) return; done = true;
+            var newName = (input.value || "").trim();
+            span.textContent = oldName; // 先复位显示
+            if (!newName || newName === oldName) return;
+            // 找到对应的 details 取 folder path
+            var details = span.closest('.mm-tree-folder[data-folder-path]');
+            if (!details) return;
+            var folderPath = details.getAttribute("data-folder-path") || "";
+            var projectId = getProjectId();
+            if (!projectId) { alert("缺少 project_id"); return; }
+            // 计算 newFolderPath: 父路径 + "/" + newName
+            var sep = folderPath.lastIndexOf("/");
+            var parent = sep >= 0 ? folderPath.substring(0, sep) : "";
+            var newFolderPath = parent ? (parent + "/" + newName) : newName;
+            var fd = new FormData();
+            fd.append("project_id", projectId);
+            fd.append("old", folderPath);
+            fd.append("new", newFolderPath);
+            fetch("/api/folders/rename", { method: "POST", body: fd })
+                .then(function (r) {
+                    if (!r.ok) return r.text().then(function (t) { throw new Error(t || ("HTTP " + r.status)); });
+                    return r.json();
+                })
+                .then(function (j) {
+                    location.reload();
+                })
+                .catch(function (err) {
+                    alert("改名失败: " + err.message);
+                });
+        }
+        input.addEventListener("keydown", function (e) {
+            if (e.key === "Enter") { e.preventDefault(); commit(); }
+            else if (e.key === "Escape") { e.preventDefault(); span.textContent = oldName; }
+        });
+        input.addEventListener("blur", commit);
+    }
+
+    document.addEventListener("dblclick", function (e) {
+        var span = e.target.closest(".mm-tree-folder-name");
+        if (!span) return;
+        e.preventDefault();
+        startRename(span);
     });
 })();
 </script>

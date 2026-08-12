@@ -623,6 +623,35 @@ def api_delete_artifact(artifact_id: int, db: Session = Depends(get_db)):
     crud.delete_artifact(db, art)
 
 
+@router.post("/artifacts/{artifact_id}/move", response_model=schemas.ArtifactRead)
+def api_move_artifact(
+    artifact_id: int,
+    folder: str = Form(""),  # C4: 目标子目录路径, 空串 = 根
+    db: Session = Depends(get_db),
+):
+    """C4: 把 artifact 挪到指定子目录下. 只改 original_name, 不动磁盘文件."""
+    art = crud.get_artifact(db, artifact_id)
+    if art is None:
+        raise HTTPException(404, "Artifact not found")
+    crud.move_artifact(db, art, folder)
+    return art
+
+
+@router.post("/folders/rename")
+def api_rename_folder(
+    project_id: int = Form(...),
+    old: str = Form(...),
+    new: str = Form(...),
+    db: Session = Depends(get_db),
+):
+    """C4: 把 project 下某子目录整体改名 (批量更新所有以 old/ 开头的 artifact)."""
+    project = crud.get_project(db, project_id)
+    if project is None:
+        raise HTTPException(404, "Project not found")
+    n = crud.rename_folder(db, project_id=project_id, old_folder=old, new_folder=new)
+    return {"renamed": n, "old": old, "new": new}
+
+
 # ---------------------------------------------------------------------------
 # Weekly Reviews (周复盘)
 # ---------------------------------------------------------------------------

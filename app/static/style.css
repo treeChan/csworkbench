@@ -2229,3 +2229,50 @@ body.mm-pick-container .mm-node.shape-container .mm-shape {
 }
 .mm-lightbox-prev { left: 20px; top: 50%; transform: translateY(-50%); }
 .mm-lightbox-next { right: 20px; top: 50%; transform: translateY(-50%); }
+
+/* ===== C4: 拖拽 artifact + 子目录改名 ===== */
+.mm-artifact-cell[draggable="true"] {
+    cursor: grab;
+}
+.mm-artifact-cell[draggable="true"]:active {
+    cursor: grabbing;
+}
+.mm-artifact-cell.mm-dragging {
+    opacity: 0.4;
+}
+/* 拖动悬停高亮 */
+.mm-tree-folder.mm-drop-target > .mm-tree-folder-head,
+.mm-artifact-tree.mm-drop-target {
+    background: var(--c-primary-bg);
+    box-shadow: inset 0 0 0 2px var(--c-primary);
+    border-radius: var(--radius-md);
+}
+.mm-tree-folder.mm-drop-target > .mm-tree-folder-body {
+    background: var(--c-primary-bg);
+    border-radius: 0 0 var(--radius-md) var(--radius-md);
+}
+/* 根级 (.mm-artifact-tree 本身作为放下目标) 也高亮 */
+.mm-artifact-tree.mm-drop-target {
+    padding: 8px;
+    transition: background 0.1s;
+}
+/* 双击改名 input */
+.mm-rename-input {
+    font-size: inherit;
+    padding: 1px 6px;
+    border: 1px solid var(--c-primary);
+    border-radius: 4px;
+    background: var(--c-surface);
+    color: var(--c-text);
+    width: 140px;
+    font-family: inherit;
+}
+.mm-tree-folder-name {
+    cursor: text;
+    border-radius: 3px;
+    padding: 1px 4px;
+    margin: -1px -4px;
+}
+.mm-tree-folder-name:hover {
+    background: var(--c-primary-bg);
+}
