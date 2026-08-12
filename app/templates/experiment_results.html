@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% import "_macros.html" as ui %}
 {% block title %}上传结果 · {{ experiment.name }}{% endblock %}
 
 {% block content %}
@@ -104,6 +105,7 @@
     </div>
     <p class="muted" style="font-size: 12px; margin: 0 0 10px;">
         上传结果图、示意图、模型权重（.pt / .pth / .onnx 等）。文件跟随所属实验 / 项目保留在本页及项目详情页。
+        填「保存路径」可放到子目录，如 <code style="font-size: 11px;">train/loss_curves</code> → 文件按目录树展示。
     </p>
 
     <form method="post" action="/experiments/{{ experiment.id }}/artifacts"
@@ -111,37 +113,15 @@
           style="display: flex; gap: 8px; align-items: center; margin-bottom: 14px; flex-wrap: wrap;">
         <input type="file" name="file" required
                style="font-size: 12.5px;">
+        <input type="text" name="folder" placeholder="保存路径（可选，如 train/loss_curves）"
+               style="padding: 6px 10px; border: 1px solid var(--c-border); border-radius: var(--radius-md); font-size: 12.5px; width: 220px;">
         <input type="text" name="description" placeholder="说明（可选，Markdown）"
                style="padding: 6px 10px; border: 1px solid var(--c-border); border-radius: var(--radius-md); font-size: 12.5px; flex: 1; min-width: 200px;">
         <button type="submit" class="btn btn-primary" style="padding: 6px 14px; font-size: 12.5px;"><svg class="icon"><use href="{{ ICON_SPRITE }}#i-upload"/></svg> 上传</button>
     </form>
 
     {% if artifacts %}
-    <div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 12px;">
-        {% for a in artifacts %}
-        <div style="border: 1px solid var(--c-border); border-radius: var(--radius-md); padding: 10px; background: var(--c-bg-soft);">
-            <div style="display: flex; align-items: center; gap: 6px; margin-bottom: 6px;">
-                {% if a.kind == 'image' %}<span><svg class="icon"><use href="{{ ICON_SPRITE }}#i-image"/></svg></span>
-                {% elif a.kind == 'model' %}<span><svg class="icon"><use href="{{ ICON_SPRITE }}#i-brain"/></svg></span>
-                {% else %}<span><svg class="icon"><use href="{{ ICON_SPRITE }}#i-file-text"/></svg></span>{% endif %}
-                <a href="/api/artifacts/{{ a.id }}/download"
-                   style="font-weight: 500; word-break: break-all;">{{ a.original_name }}</a>
-            </div>
-            <div style="font-size: 11.5px; color: var(--c-text-soft); margin-bottom: 6px;">
-                {{ a.kind }} · {{ (a.size_bytes / 1024) | round(1) }} KB · {{ a.uploaded_at | fmt_dt }}
-            </div>
-            {% if a.description %}
-            <div class="md" style="font-size: 12px;">{{ a.description | markdown | safe }}</div>
-            {% endif %}
-            <div style="text-align: right; margin-top: 6px;">
-                <form method="post" action="/artifacts/{{ a.id }}/delete" style="display:inline;">
-                    <button type="submit" class="btn btn-outline" style="padding: 1px 6px; font-size: 11px;"
-                            onclick="return confirm('确定删除这个文件？磁盘上的文件也会一起删掉。');">删除</button>
-                </form>
-            </div>
-        </div>
-        {% endfor %}
-    </div>
+    {{ ui.render_artifact_tree(artifact_tree, scope='exp-' ~ experiment.id, with_actions=true) }}
     {% else %}
     <p style="text-align: center; color: var(--c-text-soft); padding: 16px;">
         还没上传文件 — 上传图片或模型权重。
@@ -192,5 +172,8 @@
         <p style="text-align: center; color: var(--c-text-soft); padding: 16px;">还没有笔记</p>
     {% endif %}
 </div>
+
+{# C2 灯箱 (单例) #}
+{{ ui.lightbox() }}
 
 {% endblock %}

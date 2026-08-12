@@ -49,7 +49,7 @@ TEMPLATES_DIR = BASE_DIR / "templates"
 
 # 静态资源缓存版本号：改 style.css / base.html 内嵌样式后 bump 此值，
 # 浏览器强制重新下载（对应 base.html 的 style.css?v={{ style_version }}）
-STYLE_VERSION = "20260811d"
+STYLE_VERSION = "20260812a"
 
 templates = Jinja2Templates(directory=str(TEMPLATES_DIR))
 
@@ -643,6 +643,7 @@ def experiment_detail(
     metrics = crud.list_metrics(db, experiment_id)
     notes = crud.list_notes(db, experiment_id)
     artifacts = crud.list_artifacts(db, experiment_id=experiment_id)
+    artifact_tree = crud.build_artifact_tree(artifacts)
 
     return render(
         request, "experiment_detail.html",
@@ -653,6 +654,7 @@ def experiment_detail(
             "metrics": metrics,
             "notes": notes,
             "artifacts": artifacts,
+            "artifact_tree": artifact_tree,
         },
     )
 
@@ -674,6 +676,7 @@ def upload_results_form(
     metrics = crud.list_metrics(db, experiment_id)
     notes = crud.list_notes(db, experiment_id)
     artifacts = crud.list_artifacts(db, experiment_id=experiment_id)
+    artifact_tree = crud.build_artifact_tree(artifacts)
     return render(
         request, "experiment_results.html",
         {
@@ -683,6 +686,7 @@ def upload_results_form(
             "metrics": metrics,
             "notes": notes,
             "artifacts": artifacts,
+            "artifact_tree": artifact_tree,
         },
     )
 
@@ -853,6 +857,7 @@ async def upload_experiment_artifact(
     request: Request,
     file: "UploadFile" = Form(...),  # type: ignore[name-defined]
     description: str = Form(""),
+    folder: str = Form(""),  # C2: 可选, 比如 "train/loss_curves", 拼到 original_name 前
     db: Session = Depends(get_db),
 ):
     """实验页 / 结果页里上传文件。"""
@@ -867,6 +872,14 @@ async def upload_experiment_artifact(
     # 把字节塞回去给 crud
     import io as _io
     file.file = _io.BytesIO(blob)
+    # folder 前缀: 清洗 (去头尾 /, 防 ../), 然后拼到 filename 前面
+    if folder:
+        clean = folder.strip().strip("/").replace("..", "").replace("\\", "/")
+        # 多个 / 合成一个
+        while "//" in clean:
+            clean = clean.replace("//", "/")
+        if clean:
+            file.filename = f"{clean}/{file.filename or ''}"
     crud.create_artifact(
         db, file,
         owner_kind="experiment",

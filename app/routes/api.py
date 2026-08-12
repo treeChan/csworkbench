@@ -596,6 +596,25 @@ def api_download_artifact(artifact_id: int, db: Session = Depends(get_db)):
     )
 
 
+@router.get("/artifacts/{artifact_id}/inline")
+def api_inline_artifact(artifact_id: int, db: Session = Depends(get_db)):
+    """inline 返回 (用于 <img> 缩略图 / 灯箱预览 / 文本文件内嵌展示)。
+    与 /download 区别: 不带 Content-Disposition: attachment, 让浏览器直接渲染.
+    """
+    art = crud.get_artifact(db, artifact_id)
+    if art is None:
+        raise HTTPException(404, "Artifact not found")
+    path = get_artifact_dir() / art.stored_path
+    if not path.is_file():
+        raise HTTPException(410, "文件已丢失（磁盘上找不到）")
+    from fastapi.responses import FileResponse
+    return FileResponse(
+        path=str(path),
+        media_type=art.mime_type or "application/octet-stream",
+        # 不传 filename 就不写 Content-Disposition, 默认 inline
+    )
+
+
 @router.delete("/artifacts/{artifact_id}", status_code=204)
 def api_delete_artifact(artifact_id: int, db: Session = Depends(get_db)):
     art = crud.get_artifact(db, artifact_id)

@@ -1,0 +1,113 @@
+{# =====================================================================
+   共享模板片段 (macros)
+   用法: {% import "_macros.html" as ui %} 然后 {{ ui.foo(...) }}
+   ===================================================================== #}
+
+
+{# ---- 文件树 + 缩略图网格 (C2) ----
+   把一堆 artifact 按 original_name 中的 / 切成目录树渲染。
+   - tree: 预构建的嵌套 dict (在 Python 端用 crud.build_artifact_tree 生成)
+   - scope: 灯箱分组 (避免多张图都混在一起), 比如 "exp-3"
+   - with_actions: 是否渲染「删除」按钮
+
+   节点结构:
+   {
+     'folders': {<name>: <node>},
+     'files': [Artifact, ...],
+     '__order__': [<name_or_filename>, ...]   # 决定渲染顺序, 第一次出现先到先得
+   }
+#}
+{% macro render_artifact_tree(tree, scope='global', with_actions=false) -%}
+    {# 递归函数 (用 macro 模拟递归) #}
+    {%- macro render_node(node) -%}
+        {# 先按 __order__ 顺序渲染该层级下的文件夹 #}
+        {%- for key in node.get('__order__', []) -%}
+            {%- if key in node['folders'] -%}
+                {%- set sub = node['folders'][key] -%}
+                <details class="mm-tree-folder" open>
+                    <summary class="mm-tree-folder-head">
+                        <svg class="icon"><use href="{{ ICON_SPRITE }}#i-folder"/></svg>
+                        <span class="mm-tree-folder-name">{{ key }}</span>
+                        <small style="color: var(--c-text-faint); margin-left: 6px;">
+                            {{- sub['files']|length }} 项
+                        </small>
+                    </summary>
+                    <div class="mm-tree-folder-body">
+                        {{ render_node(sub) }}
+                    </div>
+                </details>
+            {%- endif -%}
+        {%- endfor -%}
+        {# 再渲染该层级下的文件 (顺序由 __order__ 维持) #}
+        {%- if node.get('files') -%}
+            <div class="mm-artifact-grid">
+                {%- for a in node['files'] -%}
+                    {%- set fname = (a.original_name or '').split('/')[-1] -%}
+                    {%- if a.kind == 'image' -%}
+                        <div class="mm-artifact-cell">
+                            <a href="/api/artifacts/{{ a.id }}/inline"
+                               data-lightbox="{{ scope }}"
+                               data-title="{{ fname }}"
+                               class="mm-artifact-thumb"
+                               title="点击放大预览">
+                                <img src="/api/artifacts/{{ a.id }}/inline"
+                                     alt="{{ fname }}"
+                                     loading="lazy">
+                                <div class="mm-artifact-thumb-name">{{ fname }}</div>
+                            </a>
+                            {%- if with_actions -%}
+                                <form method="post" action="/artifacts/{{ a.id }}/delete"
+                                      class="mm-artifact-delete"
+                                      onsubmit="return confirm('确定删除「{{ fname }}」？磁盘上的文件也会一起删掉。');">
+                                    <button type="submit" class="mm-artifact-delete-btn" title="删除">×</button>
+                                </form>
+                            {%- endif -%}
+                        </div>
+                    {%- else -%}
+                        <div class="mm-artifact-cell">
+                            <a href="/api/artifacts/{{ a.id }}/download"
+                               class="mm-artifact-file"
+                               title="下载 {{ fname }}">
+                                {%- if a.kind == 'model' -%}
+                                    <svg class="icon mm-artifact-icon"><use href="{{ ICON_SPRITE }}#i-brain"/></svg>
+                                {%- else -%}
+                                    <svg class="icon mm-artifact-icon"><use href="{{ ICON_SPRITE }}#i-file-text"/></svg>
+                                {%- endif -%}
+                                <div class="mm-artifact-file-name">{{ fname }}</div>
+                                <div class="mm-artifact-file-meta">{{ a.kind }} · {{ (a.size_bytes / 1024) | round(1) }} KB</div>
+                            </a>
+                            {%- if with_actions -%}
+                                <form method="post" action="/artifacts/{{ a.id }}/delete"
+                                      class="mm-artifact-delete"
+                                      onsubmit="return confirm('确定删除「{{ fname }}」？磁盘上的文件也会一起删掉。');">
+                                    <button type="submit" class="mm-artifact-delete-btn" title="删除">×</button>
+                                </form>
+                            {%- endif -%}
+                        </div>
+                    {%- endif -%}
+                {%- endfor -%}
+            </div>
+        {%- endif -%}
+    {%- endmacro -%}
+
+    <div class="mm-artifact-tree" data-scope="{{ scope }}">
+        {{ render_node(tree) }}
+    </div>
+{%- endmacro %}
+
+
+{# ---- 灯箱 (lightbox) ----
+   单实例, 放在页面底部, 由 JS 控制显隐. 同一 scope 内的 <a data-lightbox> 触发.
+#}
+{% macro lightbox() -%}
+    <div id="mm-lightbox" class="mm-lightbox" hidden>
+        <div class="mm-lightbox-backdrop"></div>
+        <button class="mm-lightbox-close" type="button" title="关闭 (Esc)">×</button>
+        <button class="mm-lightbox-prev" type="button" title="上一张 (←)">‹</button>
+        <button class="mm-lightbox-next" type="button" title="下一张 (→)">›</button>
+        <figure class="mm-lightbox-figure">
+            <img id="mm-lightbox-img" src="" alt="">
+            <figcaption id="mm-lightbox-caption"></figcaption>
+        </figure>
+    </div>
+{%- endmacro %}

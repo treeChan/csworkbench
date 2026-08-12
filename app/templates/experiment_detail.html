@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% import "_macros.html" as ui %}
 {% block title %}{{ experiment.name }} · {{ project.name }}{% endblock %}
 
 {% block content %}
@@ -170,22 +171,7 @@
         <h3><svg class="icon"><use href="{{ ICON_SPRITE }}#i-paperclip"/></svg> 文件与成果 <small style="color: var(--c-text-soft); font-weight: normal;">({{ artifacts|length }} 个)</small></h3>
     </div>
     {% if artifacts %}
-    <div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 10px;">
-        {% for a in artifacts %}
-        <div style="border: 1px solid var(--c-border); border-radius: var(--radius-md); padding: 10px; background: var(--c-bg-soft);">
-            <div style="display: flex; align-items: center; gap: 6px;">
-                {% if a.kind == 'image' %}<span><svg class="icon"><use href="{{ ICON_SPRITE }}#i-image"/></svg></span>
-                {% elif a.kind == 'model' %}<span><svg class="icon"><use href="{{ ICON_SPRITE }}#i-brain"/></svg></span>
-                {% else %}<span><svg class="icon"><use href="{{ ICON_SPRITE }}#i-file-text"/></svg></span>{% endif %}
-                <a href="/api/artifacts/{{ a.id }}/download"
-                   style="font-weight: 500; word-break: break-all;">{{ a.original_name }}</a>
-            </div>
-            <div style="font-size: 11px; color: var(--c-text-soft); margin-top: 4px;">
-                {{ a.kind }} · {{ (a.size_bytes / 1024) | round(1) }} KB · {{ a.uploaded_at | fmt_dt }}
-            </div>
-        </div>
-        {% endfor %}
-    </div>
+    {{ ui.render_artifact_tree(artifact_tree, scope='exp-detail-' ~ experiment.id, with_actions=false) }}
     {% else %}
     <p style="text-align: center; color: var(--c-text-soft); padding: 16px;">
         （还没有附件 — 去<a href="/experiments/{{ experiment.id }}/results"
@@ -217,5 +203,8 @@
         </p>
     {% endif %}
 </div>
+
+{# C2 灯箱 (单例, 在 results 页已经渲过一份; 这里再加一份使详情页独立可点击放大) #}
+{{ ui.lightbox() }}
 
 {% endblock %}

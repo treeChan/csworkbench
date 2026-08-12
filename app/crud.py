@@ -500,6 +500,30 @@ def delete_artifact(db: Session, artifact: models.Artifact) -> None:
     delete_artifact_file(stored_path)
 
 
+# C2: 把一组 artifact 按 original_name 中的 / 切成嵌套 dict, 给前端模板渲染
+# 结构: {'folders': {<name>: <node>}, 'files': [Artifact], '__order__': [name|filename]}
+def build_artifact_tree(artifacts) -> dict:
+    tree: dict = {"folders": {}, "files": [], "__order__": []}
+    for a in artifacts:
+        original = (a.original_name or "").strip()
+        if not original:
+            original = f"(未命名-{a.id})"
+        parts = original.split("/")
+        fname = parts[-1] or original
+        cur = tree
+        for p in parts[:-1]:
+            if not p:
+                continue
+            if p not in cur["folders"]:
+                cur["folders"][p] = {"folders": {}, "files": [], "__order__": []}
+                cur["__order__"].append(p)
+            cur = cur["folders"][p]
+        if fname not in cur["__order__"]:
+            cur["__order__"].append(fname)
+        cur["files"].append(a)
+    return tree
+
+
 def update_artifact(
     db: Session, artifact: models.Artifact, data: schemas.ArtifactUpdate
 ) -> models.Artifact:

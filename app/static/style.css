@@ -2020,3 +2020,212 @@ body.mm-pick-container .mm-node.shape-container .mm-shape {
     text-decoration: none;
 }
 .md a:hover { text-decoration: underline; }
+
+/* =================================================================
+   C2: 文件树 + 缩略图网格 + 灯箱
+   ================================================================= */
+
+/* ---- 文件树 (C2) ---- */
+.mm-artifact-tree { font-size: 13px; }
+.mm-tree-folder {
+    margin: 6px 0;
+    border-left: 1px dashed var(--c-border);
+    padding-left: 10px;
+}
+.mm-tree-folder-head {
+    cursor: pointer;
+    list-style: none;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 4px 6px;
+    border-radius: var(--radius-sm);
+    user-select: none;
+    color: var(--c-text-soft);
+    font-weight: 500;
+}
+.mm-tree-folder-head::-webkit-details-marker { display: none; }
+.mm-tree-folder-head:hover { background: var(--c-bg); color: var(--c-text); }
+.mm-tree-folder-name { font-size: 12.5px; }
+.mm-tree-folder-body { margin-top: 4px; padding-left: 4px; }
+
+/* ---- 文件网格 (C2) ---- */
+.mm-artifact-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+    gap: 10px;
+    margin: 4px 0 10px;
+}
+.mm-artifact-thumb {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    border: 1px solid var(--c-border);
+    border-radius: var(--radius-md);
+    background: var(--c-surface);
+    overflow: hidden;
+    cursor: zoom-in;
+    transition: all 0.15s;
+}
+.mm-artifact-thumb:hover {
+    border-color: var(--c-primary-light);
+    box-shadow: 0 4px 14px rgba(124, 58, 237, 0.12);
+    transform: translateY(-1px);
+}
+.mm-artifact-thumb img {
+    width: 100%;
+    height: 110px;
+    object-fit: cover;
+    background: var(--c-bg-soft);
+    display: block;
+}
+.mm-artifact-thumb-name {
+    padding: 6px 8px;
+    font-size: 11.5px;
+    color: var(--c-text);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    border-top: 1px solid var(--c-border-soft);
+    background: var(--c-bg);
+}
+.mm-artifact-file {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    padding: 14px 12px;
+    border: 1px solid var(--c-border);
+    border-radius: var(--radius-md);
+    background: var(--c-surface);
+    transition: all 0.15s;
+    color: var(--c-text);
+    min-height: 96px;
+}
+.mm-artifact-file:hover {
+    border-color: var(--c-primary-light);
+    box-shadow: 0 2px 8px rgba(124, 58, 237, 0.08);
+}
+.mm-artifact-icon {
+    font-size: 26px;
+    color: var(--c-primary);
+}
+.mm-artifact-file-name {
+    font-size: 12.5px;
+    font-weight: 500;
+    word-break: break-all;
+    line-height: 1.4;
+}
+.mm-artifact-file-meta {
+    font-size: 10.5px;
+    color: var(--c-text-faint);
+    margin-top: auto;
+}
+/* 删除按钮 - 绝对定位在右上角 (mm-artifact-cell 包裹一层, 让定位更稳) */
+.mm-artifact-cell {
+    position: relative;
+}
+.mm-artifact-delete {
+    position: absolute;
+    top: 4px;
+    right: 4px;
+    z-index: 2;
+}
+.mm-artifact-delete-btn {
+    background: rgba(255,255,255,0.92);
+    border: 1px solid var(--c-border);
+    color: var(--c-danger);
+    border-radius: 50%;
+    width: 22px;
+    height: 22px;
+    padding: 0;
+    line-height: 1;
+    font-size: 14px;
+    cursor: pointer;
+    opacity: 0;
+    transition: opacity 0.15s;
+}
+.mm-artifact-cell:hover .mm-artifact-delete-btn {
+    opacity: 1;
+}
+.mm-artifact-delete-btn:hover {
+    background: var(--c-danger-bg);
+    border-color: var(--c-danger);
+}
+
+/* ---- 灯箱 (C2) ---- */
+.mm-lightbox {
+    position: fixed;
+    inset: 0;
+    z-index: 9999;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+.mm-lightbox[hidden] { display: none; }
+.mm-lightbox-backdrop {
+    position: absolute;
+    inset: 0;
+    background: rgba(15, 23, 42, 0.88);
+    backdrop-filter: blur(4px);
+}
+.mm-lightbox-figure {
+    position: relative;
+    z-index: 1;
+    max-width: 92vw;
+    max-height: 90vh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 10px;
+    margin: 0;
+}
+.mm-lightbox-figure img {
+    max-width: 100%;
+    max-height: 80vh;
+    object-fit: contain;
+    border-radius: var(--radius-md);
+    background: #000;
+    box-shadow: 0 12px 40px rgba(0,0,0,0.4);
+}
+.mm-lightbox-figure figcaption {
+    color: #E5E7EB;
+    font-size: 13px;
+    padding: 6px 14px;
+    background: rgba(0,0,0,0.5);
+    border-radius: var(--radius-sm);
+    max-width: 80vw;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+.mm-lightbox-close,
+.mm-lightbox-prev,
+.mm-lightbox-next {
+    position: absolute;
+    z-index: 2;
+    background: rgba(255,255,255,0.15);
+    color: white;
+    border: 1px solid rgba(255,255,255,0.25);
+    border-radius: 50%;
+    width: 44px;
+    height: 44px;
+    font-size: 22px;
+    line-height: 1;
+    cursor: pointer;
+    transition: all 0.15s;
+    backdrop-filter: blur(4px);
+}
+.mm-lightbox-close:hover,
+.mm-lightbox-prev:hover,
+.mm-lightbox-next:hover {
+    background: rgba(255,255,255,0.3);
+    border-color: rgba(255,255,255,0.5);
+}
+.mm-lightbox-close {
+    top: 20px;
+    right: 20px;
+    font-size: 26px;
+}
+.mm-lightbox-prev { left: 20px; top: 50%; transform: translateY(-50%); }
+.mm-lightbox-next { right: 20px; top: 50%; transform: translateY(-50%); }
