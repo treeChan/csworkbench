@@ -44,6 +44,10 @@ class Project(Base):
     tags: Mapped[str] = mapped_column(String(500), default="")
     status: Mapped[str] = mapped_column(String(20), default="active")
 
+    # C3: 文件与成果的预设类别 (JSON 列表, 例 '["示意图","实验结果"]')
+    # 顶层目录 = 类别, 类别下还能再分子目录. None 表示用默认类别.
+    categories_json: Mapped[str | None] = mapped_column(Text, nullable=True)
+
     # 当前流水线阶段 1-8（1 文献调研 / 2 研究问题 / 3 工况设计 / 4 数值模拟
     # / 5 试验验证 / 6 数据分析 / 7 论文写作 / 8 投稿与修回）
     current_stage: Mapped[int] = mapped_column(Integer, default=1)

@@ -247,6 +247,11 @@ def _migrate_2026_08_10() -> None:
                     "ON mindmap_nodes (container_id)"
                 )
             )
+        # --- projects.categories_json (2026-08-12 C3 文件类别) ---
+        if not _column_exists(conn, "projects", "categories_json"):
+            conn.execute(
+                text("ALTER TABLE projects ADD COLUMN categories_json TEXT")
+            )
 
 
 def init_db() -> None:

@@ -49,4 +49,90 @@
         </div>
     </form>
 </div>
+
+{# C3: 项目类别管理 — 仅编辑模式显示 #}
+{% if project %}
+<div class="card" style="max-width: 720px; margin-top: 14px;">
+    <div class="card-header">
+        <h3><svg class="icon"><use href="{{ ICON_SPRITE }}#i-folder"/></svg> 文件与成果类别</h3>
+    </div>
+    <p class="muted" style="font-size: 12.5px; margin-top: 0;">
+        定义本项目下「文件与成果」可用的顶层分类。上传文件时选一个类别，文件会归到对应子目录。
+        类别下还能继续分子目录（如 <code style="font-size: 11px;">示意图/网络结构</code>）。
+        不在白名单里的旧文件会自动归入「未分类」。
+    </p>
+    <form method="post" action="/projects/{{ project.id }}/categories"
+          id="mm-cat-form">
+        <div id="mm-cat-list" style="display: flex; flex-direction: column; gap: 6px; margin-bottom: 10px;">
+            {% for c in categories %}
+            <div class="mm-cat-row" style="display: flex; gap: 6px; align-items: center;">
+                <input type="text" name="categories" value="{{ c }}" required maxlength="40"
+                       style="flex: 1; padding: 6px 10px; border: 1px solid var(--c-border); border-radius: var(--radius-md); font-size: 13px;">
+                <button type="button" class="btn btn-outline mm-cat-up"   style="padding: 2px 8px;" title="上移">↑</button>
+                <button type="button" class="btn btn-outline mm-cat-down" style="padding: 2px 8px;" title="下移">↓</button>
+                <button type="button" class="btn btn-outline mm-cat-del"  style="padding: 2px 8px;" title="删除">×</button>
+            </div>
+            {% endfor %}
+        </div>
+        <div style="display: flex; gap: 8px; align-items: center;">
+            <button type="button" id="mm-cat-add" class="btn btn-outline"
+                    style="padding: 4px 12px; font-size: 12.5px;">+ 添加类别</button>
+            <button type="submit" class="btn btn-primary"
+                    style="padding: 6px 16px; font-size: 12.5px; margin-left: auto;">
+                <svg class="icon"><use href="{{ ICON_SPRITE }}#i-save"/></svg> 保存类别
+            </button>
+        </div>
+    </form>
+</div>
+
+<script>
+(function () {
+    const list = document.getElementById('mm-cat-list');
+    const addBtn = document.getElementById('mm-cat-add');
+    const form = document.getElementById('mm-cat-form');
+    if (!list || !addBtn) return;
+
+    function makeRow(value) {
+        const row = document.createElement('div');
+        row.className = 'mm-cat-row';
+        row.style.cssText = 'display: flex; gap: 6px; align-items: center;';
+        row.innerHTML = `
+            <input type="text" name="categories" value="${(value || '').replace(/"/g, '&quot;')}" required maxlength="40"
+                   style="flex: 1; padding: 6px 10px; border: 1px solid var(--c-border); border-radius: var(--radius-md); font-size: 13px;">
+            <button type="button" class="btn btn-outline mm-cat-up"   style="padding: 2px 8px;" title="上移">↑</button>
+            <button type="button" class="btn btn-outline mm-cat-down" style="padding: 2px 8px;" title="下移">↓</button>
+            <button type="button" class="btn btn-outline mm-cat-del"  style="padding: 2px 8px;" title="删除">×</button>
+        `;
+        return row;
+    }
+
+    addBtn.addEventListener('click', () => {
+        list.appendChild(makeRow(''));
+        list.lastElementChild.querySelector('input').focus();
+    });
+
+    list.addEventListener('click', (e) => {
+        const btn = e.target.closest('button');
+        if (!btn) return;
+        const row = btn.closest('.mm-cat-row');
+        if (!row) return;
+        if (btn.classList.contains('mm-cat-del')) {
+            row.remove();
+        } else if (btn.classList.contains('mm-cat-up')) {
+            if (row.previousElementSibling) row.parentNode.insertBefore(row, row.previousElementSibling);
+        } else if (btn.classList.contains('mm-cat-down')) {
+            if (row.nextElementSibling) row.parentNode.insertBefore(row.nextElementSibling, row);
+        }
+    });
+
+    // 提交时清空空字符串行 (防止空字符串进数据库)
+    form.addEventListener('submit', () => {
+        list.querySelectorAll('input[name="categories"]').forEach(inp => {
+            if (!inp.value.trim()) inp.disabled = true;
+        });
+    });
+})();
+</script>
+{% endif %}
+
 {% endblock %}

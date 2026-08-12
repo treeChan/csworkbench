@@ -500,27 +500,104 @@ def delete_artifact(db: Session, artifact: models.Artifact) -> None:
     delete_artifact_file(stored_path)
 
 
-# C2: 把一组 artifact 按 original_name 中的 / 切成嵌套 dict, 给前端模板渲染
+# C3: 项目类别常量 + 解析
+DEFAULT_PROJECT_CATEGORIES: list[str] = [
+    "示意图",
+    "数据可视化",
+    "实验结果",
+    "模型权重",
+    "其他",
+]
+UNCATEGORIZED = "未分类"
+
+
+def get_project_categories(project) -> list[str]:
+    """读项目的类别列表. 没设置就用默认."""
+    import json
+
+    raw = getattr(project, "categories_json", None)
+    if not raw:
+        return list(DEFAULT_PROJECT_CATEGORIES)
+    try:
+        cats = json.loads(raw)
+        if isinstance(cats, list) and all(isinstance(c, str) for c in cats):
+            return [c for c in cats if c.strip()] or list(DEFAULT_PROJECT_CATEGORIES)
+    except (ValueError, TypeError):
+        pass
+    return list(DEFAULT_PROJECT_CATEGORIES)
+
+
+def set_project_categories(db: Session, project, categories: list[str]) -> None:
+    """把类别列表存到 project.categories_json. 自动去空 / 去重保留顺序."""
+    import json
+
+    seen: set[str] = set()
+    cleaned: list[str] = []
+    for c in categories:
+        c = (c or "").strip()
+        if c and c not in seen:
+            seen.add(c)
+            cleaned.append(c)
+    project.categories_json = json.dumps(cleaned, ensure_ascii=False)
+    db.commit()
+
+
+# C2/C3: 把一组 artifact 按 original_name 中的 / 切成嵌套 dict
+# - 不传 categories 时按路径自由切 (旧 C2 行为)
+# - 传 categories 时顶层固定为类别 (类别不在列表中的归「未分类」)
 # 结构: {'folders': {<name>: <node>}, 'files': [Artifact], '__order__': [name|filename]}
-def build_artifact_tree(artifacts) -> dict:
+def build_artifact_tree(artifacts, categories: list[str] | None = None) -> dict:
+    use_categories = categories is not None
+    allowed: set[str] | None = set(categories) if use_categories else None
     tree: dict = {"folders": {}, "files": [], "__order__": []}
+
+    def _ensure_folder(node: dict, key: str) -> dict:
+        if key not in node["folders"]:
+            node["folders"][key] = {"folders": {}, "files": [], "__order__": []}
+            node["__order__"].append(key)
+        return node["folders"][key]
+
     for a in artifacts:
         original = (a.original_name or "").strip()
         if not original:
             original = f"(未命名-{a.id})"
         parts = original.split("/")
         fname = parts[-1] or original
-        cur = tree
-        for p in parts[:-1]:
+
+        # C3: 第一个 path 段当作类别, 不在白名单 → 归「未分类」
+        if use_categories and len(parts) > 1:
+            head = parts[0]
+            if head in allowed:
+                cat_name = head
+                rest = parts[1:]
+            else:
+                cat_name = UNCATEGORIZED
+                rest = parts
+        elif use_categories and len(parts) == 1:
+            # 顶层文件, 没有类别前缀 → 归「未分类」
+            cat_name = UNCATEGORIZED
+            rest = parts
+        else:
+            cat_name = None
+            rest = parts
+
+        # C3: 先建/进入类别节点
+        if cat_name is not None:
+            cur = _ensure_folder(tree, cat_name)
+            path_parts = rest
+        else:
+            cur = tree
+            path_parts = rest
+
+        # C2: 然后按剩余路径建子目录
+        for p in path_parts[:-1]:
             if not p:
                 continue
-            if p not in cur["folders"]:
-                cur["folders"][p] = {"folders": {}, "files": [], "__order__": []}
-                cur["__order__"].append(p)
-            cur = cur["folders"][p]
+            cur = _ensure_folder(cur, p)
         if fname not in cur["__order__"]:
             cur["__order__"].append(fname)
         cur["files"].append(a)
+
     return tree
 
 

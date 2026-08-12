@@ -49,7 +49,7 @@ TEMPLATES_DIR = BASE_DIR / "templates"
 
 # 静态资源缓存版本号：改 style.css / base.html 内嵌样式后 bump 此值，
 # 浏览器强制重新下载（对应 base.html 的 style.css?v={{ style_version }}）
-STYLE_VERSION = "20260812a"
+STYLE_VERSION = "20260812b"
 
 templates = Jinja2Templates(directory=str(TEMPLATES_DIR))
 
@@ -356,9 +356,10 @@ def edit_project_form(
     project = crud.get_project(db, project_id)
     if project is None:
         raise HTTPException(404, "Project not found")
+    categories = crud.get_project_categories(project)
     return render(
         request, "project_form.html",
-        {"project": project, "action": "Edit"},
+        {"project": project, "action": "Edit", "categories": categories},
     )
 
 
@@ -380,6 +381,23 @@ def update_project(
     )
     crud.update_project(db, project, data)
     return RedirectResponse(f"/projects/{project_id}", status_code=303)
+
+
+@router.post("/projects/{project_id}/categories")
+def update_project_categories(
+    project_id: int,
+    categories: list[str] = Form([]),  # C3: 类别列表, 可重复
+    db: Session = Depends(get_db),
+):
+    """C3: 批量替换项目的文件类别列表。
+    客户端发 categories=<name1>&categories=<name2>&...。
+    空字符串会被丢弃, 重复只保留第一个。
+    """
+    project = crud.get_project(db, project_id)
+    if project is None:
+        raise HTTPException(404, "Project not found")
+    crud.set_project_categories(db, project, categories)
+    return RedirectResponse(f"/projects/{project_id}/edit", status_code=303)
 
 
 @router.post("/projects/{project_id}/delete")
@@ -643,7 +661,8 @@ def experiment_detail(
     metrics = crud.list_metrics(db, experiment_id)
     notes = crud.list_notes(db, experiment_id)
     artifacts = crud.list_artifacts(db, experiment_id=experiment_id)
-    artifact_tree = crud.build_artifact_tree(artifacts)
+    categories = crud.get_project_categories(project)
+    artifact_tree = crud.build_artifact_tree(artifacts, categories)
 
     return render(
         request, "experiment_detail.html",
@@ -655,6 +674,7 @@ def experiment_detail(
             "notes": notes,
             "artifacts": artifacts,
             "artifact_tree": artifact_tree,
+            "categories": categories,
         },
     )
 
@@ -676,7 +696,8 @@ def upload_results_form(
     metrics = crud.list_metrics(db, experiment_id)
     notes = crud.list_notes(db, experiment_id)
     artifacts = crud.list_artifacts(db, experiment_id=experiment_id)
-    artifact_tree = crud.build_artifact_tree(artifacts)
+    categories = crud.get_project_categories(project)
+    artifact_tree = crud.build_artifact_tree(artifacts, categories)
     return render(
         request, "experiment_results.html",
         {
@@ -687,6 +708,7 @@ def upload_results_form(
             "notes": notes,
             "artifacts": artifacts,
             "artifact_tree": artifact_tree,
+            "categories": categories,
         },
     )
 
@@ -857,13 +879,16 @@ async def upload_experiment_artifact(
     request: Request,
     file: "UploadFile" = Form(...),  # type: ignore[name-defined]
     description: str = Form(""),
-    folder: str = Form(""),  # C2: 可选, 比如 "train/loss_curves", 拼到 original_name 前
+    folder: str = Form(""),  # C2: 可选子目录, 比如 "loss_curves"
+    category: str = Form(""),  # C3: 类别, 必须命中项目的类别白名单
     db: Session = Depends(get_db),
 ):
     """实验页 / 结果页里上传文件。"""
     exp = crud.get_experiment(db, experiment_id)
     if exp is None:
         raise HTTPException(404, "Experiment not found")
+    project = crud.get_project(db, exp.project_id)
+    categories = crud.get_project_categories(project)
     # 大小限制
     from app.config import settings as _settings
     blob = await file.read()
@@ -872,14 +897,21 @@ async def upload_experiment_artifact(
     # 把字节塞回去给 crud
     import io as _io
     file.file = _io.BytesIO(blob)
-    # folder 前缀: 清洗 (去头尾 /, 防 ../), 然后拼到 filename 前面
+    # C3: 类别前缀 (必须在白名单内)
+    prefix_parts: list[str] = []
+    if category:
+        if category not in categories:
+            raise HTTPException(400, f"类别「{category}」不在本项目类别中")
+        prefix_parts.append(category)
+    # C2: folder 子目录前缀: 清洗 (去头尾 /, 防 ../)
     if folder:
         clean = folder.strip().strip("/").replace("..", "").replace("\\", "/")
-        # 多个 / 合成一个
         while "//" in clean:
             clean = clean.replace("//", "/")
         if clean:
-            file.filename = f"{clean}/{file.filename or ''}"
+            prefix_parts.append(clean)
+    if prefix_parts:
+        file.filename = f"{'/'.join(prefix_parts)}/{file.filename or ''}"
     crud.create_artifact(
         db, file,
         owner_kind="experiment",

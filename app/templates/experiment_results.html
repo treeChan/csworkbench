@@ -113,8 +113,15 @@
           style="display: flex; gap: 8px; align-items: center; margin-bottom: 14px; flex-wrap: wrap;">
         <input type="file" name="file" required
                style="font-size: 12.5px;">
-        <input type="text" name="folder" placeholder="保存路径（可选，如 train/loss_curves）"
-               style="padding: 6px 10px; border: 1px solid var(--c-border); border-radius: var(--radius-md); font-size: 12.5px; width: 220px;">
+        <select name="category" required
+                title="选择文件类别 (项目设置页可修改)"
+                style="padding: 6px 10px; border: 1px solid var(--c-border); border-radius: var(--radius-md); font-size: 12.5px; background: #fff; min-width: 130px;">
+            {% for c in categories %}
+            <option value="{{ c }}">{{ c }}</option>
+            {% endfor %}
+        </select>
+        <input type="text" name="folder" placeholder="子目录（可选，如 loss_curves）"
+               style="padding: 6px 10px; border: 1px solid var(--c-border); border-radius: var(--radius-md); font-size: 12.5px; width: 200px;">
         <input type="text" name="description" placeholder="说明（可选，Markdown）"
                style="padding: 6px 10px; border: 1px solid var(--c-border); border-radius: var(--radius-md); font-size: 12.5px; flex: 1; min-width: 200px;">
         <button type="submit" class="btn btn-primary" style="padding: 6px 14px; font-size: 12.5px;"><svg class="icon"><use href="{{ ICON_SPRITE }}#i-upload"/></svg> 上传</button>
