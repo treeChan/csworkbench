@@ -49,7 +49,7 @@ TEMPLATES_DIR = BASE_DIR / "templates"
 
 # 静态资源缓存版本号：改 style.css / base.html 内嵌样式后 bump 此值，
 # 浏览器强制重新下载（对应 base.html 的 style.css?v={{ style_version }}）
-STYLE_VERSION = "20260812c"
+STYLE_VERSION = "20260813a"
 
 templates = Jinja2Templates(directory=str(TEMPLATES_DIR))
 
@@ -366,6 +366,7 @@ def edit_project_form(
 @router.post("/projects/{project_id}")
 def update_project(
     project_id: int,
+    request: Request,
     name: str = Form(...),
     description: str = Form(""),
     tags: str = Form(""),
@@ -379,6 +380,16 @@ def update_project(
         name=name, description=description, tags=tags,
         current_stage=current_stage,
     )
+    # 防重名：改成其他项目已有名字时提示并留在编辑表单，不落库。
+    existing = crud.get_project_by_name(db, name)
+    if existing is not None and existing.id != project_id:
+        categories = crud.get_project_categories(project)
+        return render(
+            request, "project_form.html",
+            {"project": project, "action": "Edit", "categories": categories,
+             "error": f"项目名 '{name}' 已存在"},
+            status_code=400,
+        )
     crud.update_project(db, project, data)
     return RedirectResponse(f"/projects/{project_id}", status_code=303)
 

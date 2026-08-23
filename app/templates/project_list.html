@@ -19,37 +19,41 @@
 {% else %}
 <div class="project-list">
     {% for p in projects %}
-    <div class="project-row">
-        <a href="/projects/{{ p.id }}" class="project-card">
-            <div class="project-icon"><svg class="icon"><use href="{{ ICON_SPRITE }}#i-folder"/></svg></div>
-            <div class="project-meta">
-                <div class="project-name">{{ p.name }}</div>
-                <div class="project-desc">
-                    {% if p.description %}{{ p.description }}{% else %}—{% endif %}
-                </div>
-                <div style="margin-top: 4px;">
-                    {% for tag in p.tags.split(',') if tag.strip() %}
-                    <span class="badge" style="margin-right: 4px; font-size: 10px; background: var(--c-primary-bg); color: var(--c-primary); border: 1px solid var(--c-primary-light);">{{ tag.strip() }}</span>
-                    {% endfor %}
-                </div>
-            </div>
-            <div class="project-stats">
-                <span><svg class="icon"><use href="{{ ICON_SPRITE }}#i-map-pin"/></svg> <strong>{{ pipeline_stages[p.current_stage - 1][1] }}</strong></span>
-                <span>·</span>
-                <span><svg class="icon"><use href="{{ ICON_SPRITE }}#i-flask-conical"/></svg> {{ experiment_counts[p.id] }} 个实验</span>
-                <span>·</span>
-                <span style="color: var(--c-text-faint);">更新于 {{ p.updated_at | fmt_dt }}</span>
-            </div>
-        </a>
-        <form method="post" action="/projects/{{ p.id }}/delete"
-              onsubmit="return confirm('确认删除项目「{{ p.name }}」?\\n\\n该项目下的所有大目标 / 实验 / 指标 / 笔记 / 决策都会被删除!')"
-              style="display: flex; align-items: center; padding: 0 12px;">
-            <button type="submit" class="btn btn-outline"
-                    title="删除项目"
-                    style="padding: 6px 10px; font-size: 13px; color: var(--c-danger); border-color: var(--c-danger);">
-                <svg class="icon"><use href="{{ ICON_SPRITE }}#i-trash-2"/></svg>
+    <div class="swipe-row" data-swipe>
+        <div class="swipe-actions">
+            <button type="button" class="swipe-delete"
+                    data-url="/projects/{{ p.id }}/delete" data-name="{{ p.name }}">
+                <svg class="icon"><use href="{{ ICON_SPRITE }}#i-trash-2"/></svg> 删除
             </button>
-        </form>
+        </div>
+        <div class="swipe-content">
+            <a href="/projects/{{ p.id }}" class="project-card">
+                <div class="project-icon"><svg class="icon"><use href="{{ ICON_SPRITE }}#i-folder"/></svg></div>
+                <div class="project-meta">
+                    <div class="project-name">{{ p.name }}</div>
+                    <div class="project-desc">
+                        {% if p.description %}{{ p.description }}{% else %}—{% endif %}
+                    </div>
+                    <div style="margin-top: 4px;">
+                        {% for tag in p.tags.split(',') if tag.strip() %}
+                        <span class="badge" style="margin-right: 4px; font-size: 10px; background: var(--c-primary-bg); color: var(--c-primary); border: 1px solid var(--c-primary-light);">{{ tag.strip() }}</span>
+                        {% endfor %}
+                    </div>
+                </div>
+                <div class="project-stats">
+                    <span><svg class="icon"><use href="{{ ICON_SPRITE }}#i-map-pin"/></svg> <strong>{{ pipeline_stages[p.current_stage - 1][1] }}</strong></span>
+                    <span>·</span>
+                    <span><svg class="icon"><use href="{{ ICON_SPRITE }}#i-flask-conical"/></svg> {{ experiment_counts[p.id] }} 个实验</span>
+                    <span>·</span>
+                    <span style="color: var(--c-text-faint);">更新于 {{ p.updated_at | fmt_dt }}</span>
+                </div>
+            </a>
+            <button type="button" class="swipe-trigger"
+                    aria-label="更多操作" aria-haspopup="true" aria-expanded="false"
+                    title="滑动或点击显示删除">
+                <svg class="icon"><use href="{{ ICON_SPRITE }}#i-chevron-right"/></svg>
+            </button>
+        </div>
     </div>
     {% endfor %}
 </div>

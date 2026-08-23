@@ -198,6 +198,21 @@
     </div>
 </div>
 
+<!-- =================== 全局危险确认弹窗 ===================
+     收敛的删除操作（项目 / 大目标 / 实验）统一走这里做醒目二次确认：
+     红色警告 + 明确列出后果，由 window.cswbConfirm({...}) 控制显隐。 -->
+<div class="cswb-confirm-backdrop" id="cswb-confirm" hidden>
+    <div class="cswb-confirm" role="alertdialog" aria-modal="true" aria-labelledby="cswb-confirm-title">
+        <div class="cswb-confirm-icon"><svg class="icon"><use href="{{ ICON_SPRITE }}#i-alert-triangle"/></svg></div>
+        <h3 class="cswb-confirm-title" id="cswb-confirm-title">确认删除</h3>
+        <div class="cswb-confirm-msg" id="cswb-confirm-msg"></div>
+        <div class="cswb-confirm-actions">
+            <button type="button" class="btn btn-outline" id="cswb-confirm-cancel">取消</button>
+            <button type="button" class="btn btn-primary" id="cswb-confirm-ok">确认删除</button>
+        </div>
+    </div>
+</div>
+
 {% block scripts %}
 <script>
 /* ===== 全局悬浮提示（toast）：顶部居中、自动消失、可点击关闭 =====
@@ -928,6 +943,191 @@ function selectQuickType(btn) {
         if (!span) return;
         e.preventDefault();
         startRename(span);
+    });
+})();
+</script>
+
+<script>
+/* ===== 全局交互组件：危险确认弹窗 + 侧滑删除 + 「⋯」更多下拉 ===== */
+(function () {
+    "use strict";
+
+    /* ---- 提交辅助：确认后 POST 到删除 URL（沿用服务端 303 重定向）---- */
+    function submitPost(url) {
+        var f = document.createElement("form");
+        f.method = "post";
+        f.action = url;
+        f.style.display = "none";
+        document.body.appendChild(f);
+        f.submit();
+    }
+
+    /* ================= 危险确认弹窗 window.cswbConfirm ================= */
+    var confirmEl = document.getElementById("cswb-confirm");
+    var confirmTitle = document.getElementById("cswb-confirm-title");
+    var confirmMsg = document.getElementById("cswb-confirm-msg");
+    var confirmOk = document.getElementById("cswb-confirm-ok");
+    var confirmCancel = document.getElementById("cswb-confirm-cancel");
+    var onConfirmCb = null;
+
+    window.cswbConfirm = function (opts) {
+        if (!confirmEl || !opts) return;
+        confirmTitle.textContent = opts.title || "确认删除";
+        confirmMsg.textContent = "";
+        if (opts.message) confirmMsg.innerHTML = opts.message;
+        confirmOk.textContent = opts.confirmText || "确认删除";
+        onConfirmCb = opts.onConfirm || null;
+        confirmEl.hidden = false;
+        document.body.style.overflow = "hidden";
+    };
+    function closeConfirm() {
+        if (!confirmEl) return;
+        confirmEl.hidden = true;
+        document.body.style.overflow = "";
+        onConfirmCb = null;
+    }
+    if (confirmOk) confirmOk.addEventListener("click", function () {
+        var cb = onConfirmCb;
+        closeConfirm();
+        if (cb) cb();
+    });
+    if (confirmCancel) confirmCancel.addEventListener("click", closeConfirm);
+    if (confirmEl) {
+        confirmEl.addEventListener("click", function (e) {
+            if (e.target === confirmEl) closeConfirm();   // 点遮罩关闭
+        });
+    }
+    document.addEventListener("keydown", function (e) {
+        if (confirmEl && e.key === "Escape" && !confirmEl.hidden) closeConfirm();
+    });
+
+    /* ================= 侧滑删除（项目列表条目） ================= */
+    var SWIPE_W = 88;            // 必须与 style.css .swipe-actions width 一致
+    var DRAG_START = 5;          // 移动超过此 px 才进入拖拽
+    var SWIPE_THRESHOLD = 40;    // 松手时判定开/关的边界
+
+    function closeAllSwipes() {
+        document.querySelectorAll("[data-swipe].open").forEach(function (r) {
+            r.classList.remove("open");
+        });
+    }
+
+    function swipeDeleteHandler(e) {
+        var trigger = e.target.closest(".swipe-trigger");
+        var row = trigger ? trigger.closest("[data-swipe]") : e.target.closest("[data-swipe]");
+
+        // 点侧滑露出的「删除」→ 危险确认
+        var del = e.target.closest(".swipe-delete");
+        if (del) {
+            e.preventDefault();
+            closeAllSwipes();
+            window.cswbConfirm({
+                title: "删除项目",
+                message: "确认删除项目「<strong>" + (del.getAttribute("data-name") || "") +
+                         "</strong>」？<br>该项目的所有大目标 / 实验 / 指标 / 笔记 / 决策都会被删除，且无法恢复！",
+                confirmText: "删除项目",
+                onConfirm: function () { submitPost(del.getAttribute("data-url")); }
+            });
+            return;
+        }
+        if (trigger) {
+            e.preventDefault();
+            e.stopPropagation();
+            var isOpen = row.classList.contains("open");
+            closeAllSwipes();
+            if (!isOpen) row.classList.add("open");
+            return;
+        }
+        // 点条目外的空白 → 收回
+        if (!row) closeAllSwipes();
+    }
+
+    /* ================= 「⋯」更多下拉（标题栏 / 大目标 / 实验行） ================= */
+    function moreMenuHandler(e) {
+        var btn = e.target.closest(".more-menu-btn");
+        var menu = btn ? btn.closest(".more-menu") : null;
+
+        // 点菜单里的删除项 → 危险确认
+        var del = e.target.closest(".more-menu-delete");
+        if (del) {
+            e.preventDefault();
+            if (menu) menu.classList.remove("open");
+            window.cswbConfirm({
+                title: del.getAttribute("data-title") || "确认删除",
+                message: del.getAttribute("data-message") || "确认执行此删除操作？该操作无法恢复。",
+                confirmText: del.getAttribute("data-confirm") || "确认删除",
+                onConfirm: function () { submitPost(del.getAttribute("data-url")); }
+            });
+            return;
+        }
+        // 切换 / 互斥 / 点外部关闭
+        document.querySelectorAll(".more-menu.open").forEach(function (m) {
+            if (m !== menu) m.classList.remove("open");
+        });
+        if (btn && menu) menu.classList.toggle("open");
+        else if (!menu) {
+            document.querySelectorAll(".more-menu.open").forEach(function (m) {
+                m.classList.remove("open");
+            });
+        }
+    }
+
+    document.addEventListener("click", function (e) {
+        if (dragActive) {                 // 真实拖拽后的 click → 拦截（不导航）
+            e.preventDefault();
+            e.stopPropagation();
+            dragActive = false;
+            return;
+        }
+        swipeDeleteHandler(e);
+        moreMenuHandler(e);
+    }, true);
+
+    /* ---- 侧滑拖拽（pointer events）：左滑收回、右滑露出 ---- */
+    var drag = null;
+    var dragActive = false;
+
+    document.addEventListener("pointerdown", function (e) {
+        var content = e.target.closest("[data-swipe] .swipe-content");
+        if (!content) return;
+        drag = { row: content.closest("[data-swipe]"), startX: e.clientX, dx: 0 };
+        dragActive = false;
+    }, true);
+
+    document.addEventListener("pointermove", function (e) {
+        if (!drag) return;
+        var dx = e.clientX - drag.startX;
+        if (Math.abs(dx) < DRAG_START) return;
+        drag.dx = dx;
+        dragActive = true;
+        e.preventDefault();
+        var content = drag.row.querySelector(".swipe-content");
+        var base = drag.row.classList.contains("open") ? SWIPE_W : 0;
+        var t = Math.max(0, Math.min(SWIPE_W, base + dx));
+        content.style.transform = "translateX(" + t + "px)";
+        content.style.transition = "none";
+    });
+
+    function settleSwipe() {
+        if (!drag) return;
+        var row = drag.row, dx = drag.dx, content = row.querySelector(".swipe-content");
+        var open = row.classList.contains("open");
+        var shouldOpen = open ? !(dx < -SWIPE_THRESHOLD) : (dx > SWIPE_THRESHOLD);
+        content.style.transition = "";
+        content.style.transform = "";
+        row.classList.toggle("open", shouldOpen);
+        drag = null;
+        setTimeout(function () { dragActive = false; }, 0);  // click 处理后再复位
+    }
+    document.addEventListener("pointerup", settleSwipe);
+    document.addEventListener("pointercancel", function () {
+        drag = null;
+        dragActive = false;
+    });
+
+    /* ---- Esc 关闭侧滑 ---- */
+    document.addEventListener("keydown", function (e) {
+        if (e.key === "Escape") closeAllSwipes();
     });
 })();
 </script>

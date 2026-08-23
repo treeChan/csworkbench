@@ -9,16 +9,21 @@
 <!-- ============= 标题 ============= -->
 <div class="today-header">
     <h1>{{ project.name }}</h1>
-    <div style="margin-left: auto; display: flex; gap: 8px;">
+    <div style="margin-left: auto; display: flex; gap: 8px; align-items: center;">
         <a href="/projects/{{ project.id }}/edit" class="btn btn-outline"><svg class="icon"><use href="{{ ICON_SPRITE }}#i-pencil"/></svg> 编辑</a>
-        <form method="post" action="/projects/{{ project.id }}/delete"
-              onsubmit="return confirm('确认删除项目「{{ project.name }}」?\\n\\n项目下所有大目标 / 实验 / 指标 / 笔记 / 决策都会被删除，且无法恢复!')"
-              style="display:inline;">
-            <button type="submit" class="btn btn-outline"
-                    style="color: var(--c-danger); border-color: var(--c-danger);">
-                <svg class="icon"><use href="{{ ICON_SPRITE }}#i-trash-2"/></svg> 删除项目
+        <div class="more-menu">
+            <button type="button" class="more-menu-btn" aria-label="更多操作" aria-haspopup="true" aria-expanded="false">
+                <svg class="icon"><use href="{{ ICON_SPRITE }}#i-more-horizontal"/></svg>
             </button>
-        </form>
+            <div class="more-menu-list">
+                <button type="button" class="more-menu-item more-menu-delete"
+                        data-url="/projects/{{ project.id }}/delete"
+                        data-title="删除项目" data-confirm="删除项目"
+                        data-message="确认删除项目「<strong>{{ project.name }}</strong>」？<br>项目下所有大目标 / 实验 / 指标 / 笔记 / 决策都会被删除，且无法恢复！">
+                    <svg class="icon"><use href="{{ ICON_SPRITE }}#i-trash-2"/></svg> 删除项目
+                </button>
+            </div>
+        </div>
     </div>
 </div>
 
@@ -76,12 +81,19 @@
                         实验 {{ card.experiments|length }} 个
                         · 已上传结果 {{ card.experiments|selectattr('experiment.result_summary')|list|length }} 个
                     </small>
-                    <form method="post" action="/goals/{{ card.goal.id }}/delete"
-                          onsubmit="return confirm('确认删除大目标「{{ card.goal.name }}」? 其下所有实验也会被删除!')"
-                          style="display:inline; margin-left: 8px;">
-                        <button type="submit" class="btn btn-outline"
-                                style="padding: 2px 8px; font-size: 11px;"><svg class="icon"><use href="{{ ICON_SPRITE }}#i-trash-2"/></svg></button>
-                    </form>
+                    <div class="more-menu" style="margin-left: 8px;">
+                        <button type="button" class="more-menu-btn" aria-label="更多操作" aria-haspopup="true" aria-expanded="false">
+                            <svg class="icon"><use href="{{ ICON_SPRITE }}#i-more-horizontal"/></svg>
+                        </button>
+                        <div class="more-menu-list">
+                            <button type="button" class="more-menu-item more-menu-delete"
+                                    data-url="/goals/{{ card.goal.id }}/delete"
+                                    data-title="删除大目标" data-confirm="删除大目标"
+                                    data-message="确认删除大目标「<strong>{{ card.goal.name }}</strong>」？<br>其下所有实验也会被删除！">
+                                <svg class="icon"><use href="{{ ICON_SPRITE }}#i-trash-2"/></svg> 删除大目标
+                            </button>
+                        </div>
+                    </div>
                 </div>
             </div>
 
@@ -125,18 +137,23 @@
                             {{ item.experiment.updated_at | fmt_dt }}
                         </td>
                         <td>
-                            <div style="display: flex; gap: 4px; justify-content: flex-end;">
+                            <div style="display: flex; gap: 4px; justify-content: flex-end; align-items: center;">
                                 <a href="/experiments/{{ item.experiment.id }}/edit"
                                    class="btn btn-outline"
                                    style="padding: 2px 8px; font-size: 11px;">编辑</a>
-                                <form method="post"
-                                      action="/experiments/{{ item.experiment.id }}/delete"
-                                      onsubmit="return confirm('确认删除实验「{{ item.experiment.name }}」？\n\n该实验下的指标和笔记也会一起删除，且无法恢复！')"
-                                      style="display:inline;">
-                                    <button type="submit" class="btn btn-outline"
-                                            title="删除实验"
-                                            style="padding: 2px 8px; font-size: 11px; color: var(--c-danger); border-color: var(--c-danger);"><svg class="icon"><use href="{{ ICON_SPRITE }}#i-trash-2"/></svg></button>
-                                </form>
+                                <div class="more-menu">
+                                    <button type="button" class="more-menu-btn" aria-label="更多操作" aria-haspopup="true" aria-expanded="false">
+                                        <svg class="icon"><use href="{{ ICON_SPRITE }}#i-more-horizontal"/></svg>
+                                    </button>
+                                    <div class="more-menu-list">
+                                        <button type="button" class="more-menu-item more-menu-delete"
+                                                data-url="/experiments/{{ item.experiment.id }}/delete"
+                                                data-title="删除实验" data-confirm="删除实验"
+                                                data-message="确认删除实验「<strong>{{ item.experiment.name }}</strong>」？<br>该实验下的指标和笔记也会一起删除，且无法恢复！">
+                                            <svg class="icon"><use href="{{ ICON_SPRITE }}#i-trash-2"/></svg> 删除实验
+                                        </button>
+                                    </div>
+                                </div>
                             </div>
                         </td>
                     </tr>

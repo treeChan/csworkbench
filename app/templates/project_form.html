@@ -11,7 +11,14 @@
 </div>
 
 <div class="card" style="max-width: 720px;">
-    <form method="post" action="/projects">
+    {% if error %}
+    <div class="form-error" role="alert"
+         style="background: var(--c-danger-bg, rgba(220,38,38,.08)); color: var(--c-danger); border: 1px solid var(--c-danger); padding: 10px 14px; border-radius: var(--radius-md); margin-bottom: 14px;">
+        {{ error }}
+    </div>
+    {% endif %}
+    <form method="post"
+          action="{{ '/projects/' + project.id|string if project else '/projects' }}">
         <div class="form-row">
             <label>项目名 *</label>
             <input type="text" name="name" required minlength="1" maxlength="100"
