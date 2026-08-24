@@ -55,6 +55,17 @@
         · 全部完成 <svg class="icon"><use href="{{ ICON_SPRITE }}#i-check"/></svg>
         {% endif %}
     </div>
+    <div class="pipeline-evidence" title="各阶段的数据依据（供手动切换参考，当前阶段高亮）">
+        {% for num, name in pipeline_stages %}
+        <span class="pipeline-ev {% if num == project.current_stage %}ev-active{% endif %}"
+              title="阶段 {{ num }} · {{ name }}">
+            <span class="ev-stage">{{ num }}.{{ name }}</span>
+            {% for label, val in stage_evidence.get(num, []) %}
+            <span class="ev-item">{{ label }} {{ val }}</span>
+            {% endfor %}
+        </span>
+        {% endfor %}
+    </div>
 </div>
 
 <!-- ============= 大目标列表 ============= -->

@@ -49,7 +49,7 @@ TEMPLATES_DIR = BASE_DIR / "templates"
 
 # 静态资源缓存版本号：改 style.css / base.html 内嵌样式后 bump 此值，
 # 浏览器强制重新下载（对应 base.html 的 style.css?v={{ style_version }}）
-STYLE_VERSION = "20260813a"
+STYLE_VERSION = "20260813b"
 
 templates = Jinja2Templates(directory=str(TEMPLATES_DIR))
 
@@ -338,6 +338,26 @@ def project_detail(
 
     decisions = crud.list_decisions(db, project_id)
 
+    # —— 当前研究阶段的「数据佐证」（方案 A）：阶段由用户手动标签，
+    #    这里把每个阶段的可量化依据展示出来，让切换有据可依。——
+    exp_all = [exp for g in goals for exp in g.experiments]
+    total_goals = len(goals)
+    completed_goals = sum(1 for g in goals if g.status == "completed")
+    total_exp = len(exp_all)
+    draft_exp = sum(1 for e in exp_all if e.status == "draft")
+    running_exp = sum(1 for e in exp_all if e.status == "running")
+    completed_exp = sum(1 for e in exp_all if e.status == "completed")
+    with_results = sum(1 for e in exp_all if (e.result_summary or "").strip())
+    resolved_decisions = sum(1 for d in decisions if d.status == "已解决")
+    stage_evidence: dict[int, list[tuple[str, str]]] = {
+        1: [("大目标", f"{total_goals}"), ("完成", f"{completed_goals}")],
+        2: [("实验", f"{total_exp}"), ("草稿", f"{draft_exp}")],
+        3: [("运行中", f"{running_exp}")],
+        4: [("已完成", f"{completed_exp}"), ("有结果", f"{with_results}")],
+        5: [("目标完成", f"{completed_goals}/{total_goals}"),
+            ("决策已解决", f"{resolved_decisions}")],
+    }
+
     return render(
         request, "project_detail.html",
         {
@@ -345,6 +365,7 @@ def project_detail(
             "project": project,
             "goal_cards": goal_cards,
             "decisions": decisions,
+            "stage_evidence": stage_evidence,
         },
     )
 

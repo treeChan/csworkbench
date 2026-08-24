@@ -2436,3 +2436,35 @@ body.mm-pick-container .mm-node.shape-container .mm-shape {
 .more-menu-item:hover { background: var(--c-primary-bg); color: var(--c-primary); }
 .more-menu-item.more-menu-delete { color: var(--c-danger); }
 .more-menu-item.more-menu-delete:hover { background: var(--c-danger); color: #fff; }
+
+/* ---- 阶段佐证条（当前研究阶段：手动标签 + 数据依据）---- */
+.pipeline-evidence {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin-top: 10px;
+}
+.pipeline-ev {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 4px 10px;
+    border: 1px dashed var(--c-border);
+    border-radius: var(--radius-md);
+    font-size: 11.5px;
+    color: var(--c-text-soft);
+    background: var(--c-bg);
+}
+.pipeline-ev .ev-stage {
+    font-weight: 600;
+    color: var(--c-text);
+    white-space: nowrap;
+}
+.pipeline-ev .ev-item { white-space: nowrap; }
+.pipeline-ev.ev-active {
+    border-style: solid;
+    border-color: var(--c-primary);
+    background: var(--c-primary-bg);
+    color: var(--c-primary);
+}
+.pipeline-ev.ev-active .ev-stage { color: var(--c-primary); }
