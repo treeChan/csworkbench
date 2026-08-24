@@ -92,9 +92,16 @@ jobs:
         run: |
           FILE="docs/release-notes.md"
           if [ -f "$FILE" ]; then
-            echo "releaseBody<<EOF" >> "$GITHUB_OUTPUT"
-            cat "$FILE" >> "$GITHUB_OUTPUT"
-            echo "EOF" >> "$GITHUB_OUTPUT"
+            # 确保文件以换行结尾：否则 cat 的内容会与下方 "EOF" 分隔符粘成一行，
+            # GITHUB_OUTPUT 解析不到独立 EOF 行 → "Matching delimiter not found" 报错
+            [ -z "$(tail -c1 "$FILE")" ] || printf '\n' >> "$FILE"
+            # 分隔符用固定长串，避免 release notes 正文里恰好出现独立 "EOF" 行导致提前截断
+            DELIM="CSWB_RELEASE_BODY_EOF"
+            {
+              echo "releaseBody<<${DELIM}"
+              cat "$FILE"
+              echo "${DELIM}"
+            } >> "$GITHUB_OUTPUT"
             echo "Read $FILE as release notes"
           else
             echo "WARN: $FILE not found, release will have no update log"
