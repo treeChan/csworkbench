@@ -2,6 +2,34 @@
 {% import "_macros.html" as ui %}
 {% block title %}{{ experiment.name }} · {{ project.name }}{% endblock %}
 
+{% block head %}
+{# Plotly 用于图表区 (条形/折线/表格切换). 基础版 ~800KB, 仅本页面加载 #}
+<script src="https://cdn.jsdelivr.net/npm/plotly.js@2.35.2/dist/plotly-basic.min.js"></script>
+<style>
+    .chart-controls { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; margin-bottom: 10px; }
+    .chart-controls label { color: var(--c-text-soft); font-size: 12.5px; }
+    .chart-controls select {
+        padding: 4px 10px; border: 1px solid var(--c-border);
+        border-radius: var(--radius-md); background: var(--c-bg); font-size: 12.5px;
+        color: var(--c-text);
+    }
+    .chart-controls button {
+        padding: 4px 12px; border: 1px solid var(--c-border);
+        border-radius: var(--radius-md); background: var(--c-bg); font-size: 12.5px;
+        cursor: pointer; color: var(--c-text);
+    }
+    .chart-controls button:hover { background: var(--c-primary-bg); }
+    .chart-controls button.active {
+        background: var(--c-primary); color: #fff; border-color: var(--c-primary);
+    }
+    #chart-container {
+        min-height: 360px; background: var(--c-bg);
+        border-radius: var(--radius-md); padding: 8px;
+    }
+    .chart-hint { color: var(--c-text-soft); font-size: 12px; margin-top: 6px; }
+</style>
+{% endblock %}
+
 {% block content %}
 <div class="breadcrumb">
     <a href="/projects">研究项目</a>
@@ -22,6 +50,7 @@
         {% endif %}
     </h1>
     <div style="margin-left: auto; display: flex; gap: 8px;">
+        <a href="/projects/{{ project.id }}" class="btn btn-outline">← 返回项目</a>
         <a href="/api/experiments/{{ experiment.id }}/export" class="btn btn-outline"
            title="把实验的所有内容打成 ZIP 下载"><svg class="icon"><use href="{{ ICON_SPRITE }}#i-package"/></svg> 导出</a>
         <a href="/experiments/{{ experiment.id }}/results" class="btn btn-primary"><svg class="icon"><use href="{{ ICON_SPRITE }}#i-upload"/></svg> 上传结果</a>
@@ -130,6 +159,164 @@
         <p style="color: var(--c-text-soft); font-size: 13px;">（未上传结果）</p>
     {% endif %}
 </div>
+
+<!-- 指标图表 (条形 / 折线 / 表格, 横轴 = note, 纵轴 = 选中的 key) -->
+{% if metrics %}
+<div class="card">
+    <div class="card-header">
+        <h3><svg class="icon"><use href="{{ ICON_SPRITE }}#i-chart-column"/></svg> 指标图表
+            <small style="color: var(--c-text-soft); font-weight: normal;">
+                ({{ experiment.name }})
+            </small>
+        </h3>
+    </div>
+    <div class="chart-controls">
+        <label>指标:
+            <select id="chart-key" style="margin-left: 6px;"></select>
+        </label>
+        <label style="margin-left: 16px;">图表类型:</label>
+        <button type="button" class="chart-type-btn active" data-type="bar">条形图</button>
+        <button type="button" class="chart-type-btn" data-type="line">折线图</button>
+        <button type="button" class="chart-type-btn" data-type="table">表格</button>
+        <button type="button" id="chart-download" style="margin-left: auto;">下载 PNG</button>
+    </div>
+    <div id="chart-container"></div>
+    <p class="chart-hint">横轴 = 指标记录的「备注」(note) · 纵轴 = 数值 · 每个备注对应一个数据点 (raw, 不聚合)</p>
+</div>
+
+{# 把 metrics 数据序列化为 JSON, 前端 Plotly 直接消费. 用 | safe 防止 Jinja 把 " 转义成 &#34; #}
+<script id="metrics-data" type="application/json">
+[
+{%- for m in metrics -%}
+{"key": {{ m.key | tojson | safe }}, "value": {{ m.value }}, "note": {{ m.note | tojson | safe }}, "ts": {{ m.timestamp.isoformat() | tojson | safe }}}{% if not loop.last %},{% endif %}
+{%- endfor -%}
+]
+</script>
+
+<script>
+(function () {
+    const raw = JSON.parse(document.getElementById("metrics-data").textContent);
+    if (!raw.length) return;
+
+    const container = document.getElementById("chart-container");
+    const sel = document.getElementById("chart-key");
+    const btns = document.querySelectorAll(".chart-type-btn");
+    const dl = document.getElementById("chart-download");
+
+    // 按 key 分组, 用于 select 选项 (去重)
+    const keys = [...new Set(raw.map(d => d.key))];
+    keys.forEach(k => {
+        const opt = document.createElement("option");
+        opt.value = k;
+        opt.textContent = k;
+        sel.appendChild(opt);
+    });
+
+    let currentKey = keys[0];
+    let currentType = "bar";
+
+    function getTheme() {
+        const dark = document.documentElement.getAttribute("data-theme") === "dark";
+        return {
+            paper: "transparent",
+            plot: dark ? "#1e1e2e" : "#ffffff",
+            text: dark ? "#e4e4e7" : "#27272a",
+            grid: dark ? "#3f3f46" : "#e4e4e7",
+            primary: getComputedStyle(document.documentElement).getPropertyValue("--c-primary").trim() || "#7C3AED"
+        };
+    }
+
+    function fmtNote(n) {
+        return (n && n.length) ? n : "（无备注）";
+    }
+
+    function drawChart() {
+        const t = getTheme();
+        const pts = raw.filter(d => d.key === currentKey);
+        // 按 timestamp 升序画图 (横轴 = note, 顺序无所谓; 折线按时间排序更直观)
+        pts.sort((a, b) => (a.ts < b.ts ? -1 : a.ts > b.ts ? 1 : 0));
+        const xs = pts.map(d => fmtNote(d.note));
+        const ys = pts.map(d => d.value);
+        const texts = pts.map(d => d.value.toPrecision(4));
+
+        if (currentType === "table") {
+            // 用 HTML 表格 (Plotly table 体积大, 直接用 DOM 更轻)
+            let html = '<table class="tbl" style="width:100%;"><thead><tr><th>备注</th><th>数值</th><th>记录时间</th></tr></thead><tbody>';
+            for (const p of pts) {
+                html += `<tr><td>${fmtNote(p.note)}</td><td style="font-family:ui-monospace,monospace;">${p.value.toPrecision(6)}</td><td style="color:${t.text};opacity:0.7;font-size:12px;">${p.ts.replace("T", " ").slice(0, 16)}</td></tr>`;
+            }
+            html += "</tbody></table>";
+            container.innerHTML = html;
+            dl.style.display = "none";
+            return;
+        }
+
+        dl.style.display = "";
+        const trace = {
+            x: xs,
+            y: ys,
+            text: texts,
+            textposition: "outside",
+            type: currentType,
+            mode: currentType === "line" ? "lines+markers+text" : "markers+text",
+            marker: { color: t.primary, size: 10 },
+            line: { color: t.primary, width: 2, shape: "spline" },
+            hovertemplate: "<b>%{x}</b><br>" + currentKey + ": %{y}<extra></extra>"
+        };
+
+        const layout = {
+            title: { text: currentKey + " · " + pts.length + " 个数据点", font: { color: t.text, size: 13 } },
+            xaxis: {
+                title: { text: "备注", font: { color: t.text, size: 11 } },
+                tickangle: -25,
+                tickfont: { color: t.text, size: 11 },
+                gridcolor: t.grid
+            },
+            yaxis: {
+                title: { text: currentKey, font: { color: t.text, size: 11 } },
+                tickfont: { color: t.text, size: 11 },
+                gridcolor: t.grid
+            },
+            plot_bgcolor: t.plot,
+            paper_bgcolor: t.paper,
+            margin: { t: 36, b: 90, l: 60, r: 16 },
+            height: 360,
+            font: { family: "system-ui, -apple-system, sans-serif" }
+        };
+
+        Plotly.newPlot(container, [trace], layout, {
+            displaylogo: false,
+            responsive: true,
+            modeBarButtonsToRemove: ["lasso2d", "select2d"]
+        });
+    }
+
+    sel.addEventListener("change", e => {
+        currentKey = e.target.value;
+        drawChart();
+    });
+    btns.forEach(b => {
+        b.addEventListener("click", () => {
+            currentType = b.dataset.type;
+            btns.forEach(x => x.classList.toggle("active", x === b));
+            drawChart();
+        });
+    });
+    dl.addEventListener("click", () => {
+        if (currentType === "table") return;
+        const safeName = (currentKey || "chart").replace(/[^a-z0-9_一-龥\-]+/gi, "_");
+        Plotly.downloadImage(container, {
+            format: "png",
+            width: 1200,
+            height: 600,
+            filename: "{{ experiment.name | replace(' ', '_') }}-" + safeName
+        });
+    });
+
+    drawChart();
+})();
+</script>
+{% endif %}
 
 <!-- 指标（表格，不再画曲线） -->
 <div class="card">

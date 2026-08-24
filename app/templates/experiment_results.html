@@ -62,6 +62,210 @@
         <button type="submit" class="btn btn-primary" style="padding: 6px 14px; font-size: 12.5px;">+ 记录</button>
     </form>
 
+    {# 批量粘贴 (TSV / Markdown 表 / JSON) — 折叠区, 默认收起 #}
+    <details style="margin-bottom: 14px; border: 1px solid var(--c-border); border-radius: var(--radius-md); padding: 8px 12px; background: var(--c-bg-soft);">
+        <summary style="cursor: pointer; font-size: 13px; color: var(--c-primary); user-select: none;">
+            📋 批量粘贴 (一次性录多条指标)
+        </summary>
+        <p style="color: var(--c-text-soft); font-size: 12px; margin: 8px 0 6px;">
+            支持三种格式, 粘贴后点「解析预览」查看将录入的条目, 确认无误再「导入」。
+            <strong>任一行解析失败整批拒绝提交</strong> — 不会有「半成功」。
+        </p>
+        <textarea id="batch-input" rows="6" placeholder="支持 TSV / Markdown 表格 / JSON 数组, 例:&#10;&#10;方向余弦误差	0.0085	深监督权重0.05&#10;平均角误差 (Angle)	5.96	深监督权重0.05"
+                  style="width: 100%; padding: 8px; border: 1px solid var(--c-border); border-radius: var(--radius-md); font-family: ui-monospace, monospace; font-size: 12px; box-sizing: border-box;"></textarea>
+        <div style="margin-top: 8px; display: flex; gap: 8px; align-items: center;">
+            <button type="button" id="batch-parse" class="btn btn-outline" style="padding: 5px 12px; font-size: 12.5px;">解析预览</button>
+            <button type="button" id="batch-import" class="btn btn-primary" disabled
+                    style="padding: 5px 14px; font-size: 12.5px;">确认导入 (0 条)</button>
+            <span id="batch-status" style="color: var(--c-text-soft); font-size: 12px;"></span>
+        </div>
+        <div id="batch-preview" style="margin-top: 10px;"></div>
+    </details>
+
+    <script>
+    (function () {
+        const ta = document.getElementById("batch-input");
+        const btnParse = document.getElementById("batch-parse");
+        const btnImport = document.getElementById("batch-import");
+        const status = document.getElementById("batch-status");
+        const preview = document.getElementById("batch-preview");
+
+        let parsed = [];  // [{key, value, note}]
+
+        function tryParse(text) {
+            const t = text.trim();
+            if (!t) return { ok: false, msg: "粘贴内容为空" };
+
+            // 1. JSON
+            if (t.startsWith("[") || t.startsWith("{")) {
+                try {
+                    let arr = JSON.parse(t);
+                    if (!Array.isArray(arr)) arr = [arr];
+                    const items = arr.map((x, i) => {
+                        if (typeof x !== "object" || x === null) {
+                            throw new Error(`第 ${i + 1} 项不是对象`);
+                        }
+                        // 兼容 key/name/value/note/value/val 等字段名
+                        const key = x.key ?? x.name ?? x.指标 ?? x.名称;
+                        const value = x.value ?? x.val ?? x.数值 ?? x.score;
+                        const note = x.note ?? x.备注 ?? x.comment ?? x.label ?? "";
+                        if (key === undefined) throw new Error(`第 ${i + 1} 项缺少 key/name/指标 字段`);
+                        if (value === undefined || value === null) throw new Error(`第 ${i + 1} 项缺少 value/val/数值 字段`);
+                        return { key: String(key), value: Number(value), note: String(note) };
+                    });
+                    return { ok: true, items, fmt: "JSON" };
+                } catch (e) {
+                    return { ok: false, msg: "JSON 解析失败: " + e.message };
+                }
+            }
+
+            // 2. Markdown 表格 (含 |---| 分隔行)
+            if (/^\s*\|.*\|\s*$/m.test(t) && /\|\s*[-:]+\s*\|/.test(t)) {
+                try {
+                    const lines = t.split(/\r?\n/).filter(l => l.trim());
+                    if (lines.length < 2) return { ok: false, msg: "Markdown 表格至少需要表头 + 一行数据" };
+                    const sepIdx = lines.findIndex(l => /\|\s*[-:]+\s*\|/.test(l));
+                    if (sepIdx < 0) return { ok: false, msg: "找不到 Markdown 分隔行 |---|" };
+                    const splitRow = (l) => l.split("|").map(s => s.trim()).filter((_, i, arr) => i > 0 && i < arr.length - 1);
+                    const headers = splitRow(lines[sepIdx - 1] || lines[0]);
+                    const dataLines = lines.slice(sepIdx + 1);
+                    const keyIdx = headers.findIndex(h => /^(key|name|指标|名称)$/i.test(h));
+                    const valIdx = headers.findIndex(h => /^(value|val|数值|score)$/i.test(h));
+                    const noteIdx = headers.findIndex(h => /^(note|备注|comment|label)$/i.test(h));
+                    if (keyIdx < 0 || valIdx < 0) {
+                        return { ok: false, msg: "Markdown 表头必须含 key/name/指标 和 value/val/数值 列" };
+                    }
+                    const items = dataLines.map((l, i) => {
+                        const cells = splitRow(l);
+                        return {
+                            key: String(cells[keyIdx] ?? "").trim(),
+                            value: Number(cells[valIdx]),
+                            note: String(cells[noteIdx] ?? "").trim()
+                        };
+                    });
+                    return { ok: true, items, fmt: "Markdown 表" };
+                } catch (e) {
+                    return { ok: false, msg: "Markdown 解析失败: " + e.message };
+                }
+            }
+
+            // 3. TSV / CSV (Excel 复制粘贴最常见) — 按 \t 或 , 分割
+            try {
+                const lines = t.split(/\r?\n/).filter(l => l.trim());
+                if (lines.length === 0) return { ok: false, msg: "空内容" };
+                const sep = lines[0].includes("\t") ? "\t" : ",";
+                const firstCells = lines[0].split(sep).map(s => s.trim());
+                // 检测第一行是否是 header
+                const looksHeader = firstCells.some(c => /^(key|name|value|val|note|指标|名称|数值|备注)$/i.test(c));
+                const startIdx = looksHeader ? 1 : 0;
+                // 列顺序: 优先 key, value, note; 否则前三列 key, value, note
+                let keyIdx = 0, valIdx = 1, noteIdx = 2;
+                if (looksHeader) {
+                    keyIdx = firstCells.findIndex(c => /^(key|name|指标|名称)$/i.test(c));
+                    valIdx = firstCells.findIndex(c => /^(value|val|数值|score)$/i.test(c));
+                    noteIdx = firstCells.findIndex(c => /^(note|备注|comment|label)$/i.test(c));
+                    if (keyIdx < 0 || valIdx < 0) {
+                        return { ok: false, msg: "TSV/CSV 表头必须含 key/name/指标 和 value/val/数值 列" };
+                    }
+                }
+                const items = [];
+                for (let i = startIdx; i < lines.length; i++) {
+                    const cells = lines[i].split(sep).map(s => s.trim());
+                    items.push({
+                        key: String(cells[keyIdx] ?? "").trim(),
+                        value: Number(cells[valIdx]),
+                        note: String(cells[noteIdx] ?? "").trim()
+                    });
+                }
+                return { ok: true, items, fmt: looksHeader ? "TSV/CSV (有表头)" : "TSV/CSV (无表头,前三列视为 key/value/note)" };
+            } catch (e) {
+                return { ok: false, msg: "解析失败: " + e.message };
+            }
+        }
+
+        function renderPreview() {
+            if (!parsed.length) {
+                preview.innerHTML = "";
+                btnImport.textContent = "确认导入 (0 条)";
+                btnImport.disabled = true;
+                return;
+            }
+            // 校验
+            const errs = [];
+            parsed.forEach((it, i) => {
+                if (!it.key) errs.push({ i, msg: "名称为空" });
+                if (!Number.isFinite(it.value)) errs.push({ i, msg: "数值非数字" });
+            });
+            const ok = errs.length === 0;
+            let html = `<div style="font-size: 12px; color: var(--c-text-soft); margin-bottom: 6px;">将录入 ${parsed.length} 条 ${ok ? "✓" : "✗ 有 " + errs.length + " 行错误"}</div>`;
+            html += '<table class="tbl" style="font-size: 12px;"><thead><tr><th>#</th><th>名称</th><th>数值</th><th>备注</th></tr></thead><tbody>';
+            parsed.forEach((it, i) => {
+                const err = errs.find(e => e.i === i);
+                const bg = err ? "background: var(--c-danger-bg, #fef2f2);" : "";
+                html += `<tr style="${bg}"><td>${i + 1}</td><td><code>${escapeHtml(it.key)}</code></td><td style="font-family: ui-monospace, monospace;">${Number.isFinite(it.value) ? it.value : "<em style='color:#dc2626'>" + escapeHtml(String(it.value)) + "</em>"}</td><td>${escapeHtml(it.note)}</td></tr>`;
+            });
+            html += "</tbody></table>";
+            preview.innerHTML = html;
+            btnImport.textContent = `确认导入 (${parsed.length} 条)`;
+            btnImport.disabled = !ok;
+        }
+
+        function escapeHtml(s) {
+            return String(s).replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+        }
+
+        btnParse.addEventListener("click", () => {
+            const r = tryParse(ta.value);
+            if (!r.ok) {
+                status.style.color = "#dc2626";
+                status.textContent = "✗ " + r.msg;
+                parsed = [];
+                preview.innerHTML = "";
+                btnImport.disabled = true;
+                btnImport.textContent = "确认导入 (0 条)";
+                return;
+            }
+            parsed = r.items;
+            status.style.color = "var(--c-primary)";
+            status.textContent = "✓ 解析成功 (" + r.fmt + "格式), " + parsed.length + " 条";
+            renderPreview();
+        });
+
+        btnImport.addEventListener("click", async () => {
+            if (!parsed.length || btnImport.disabled) return;
+            btnImport.disabled = true;
+            btnImport.textContent = "导入中…";
+            status.style.color = "var(--c-text-soft)";
+            status.textContent = "";
+            try {
+                const resp = await fetch("/experiments/{{ experiment.id }}/metrics/batch", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ items: parsed })
+                });
+                if (resp.ok) {
+                    const data = await resp.json();
+                    status.style.color = "var(--c-primary)";
+                    status.textContent = "✓ 成功导入 " + data.created + " 条, 刷新中…";
+                    setTimeout(() => location.reload(), 600);
+                } else {
+                    const err = await resp.json().catch(() => ({ detail: "未知错误" }));
+                    const msg = err.detail?.msg || err.detail || "提交失败";
+                    status.style.color = "#dc2626";
+                    status.textContent = "✗ " + msg;
+                    btnImport.disabled = false;
+                    btnImport.textContent = `确认导入 (${parsed.length} 条)`;
+                }
+            } catch (e) {
+                status.style.color = "#dc2626";
+                status.textContent = "✗ 网络错误: " + e.message;
+                btnImport.disabled = false;
+                btnImport.textContent = `确认导入 (${parsed.length} 条)`;
+            }
+        });
+    })();
+    </script>
+
     {% if metrics %}
     <table class="tbl">
         <thead>

@@ -138,6 +138,14 @@ class MetricCreate(BaseModel):
     step: int | None = None
 
 
+class MetricBatchCreate(BaseModel):
+    """批量录入指标 — 前端把粘贴的文本解析成 items 后发过来。
+
+    路由 /experiments/{id}/metrics/batch 用, 任一行校验失败整批 400。
+    """
+    items: list[MetricCreate]
+
+
 class MetricRead(BaseModel):
     id: int
     experiment_id: int

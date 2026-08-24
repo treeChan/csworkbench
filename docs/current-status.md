@@ -9,7 +9,6 @@
 发布相关:
 - 版本号: `0.4.6-preview.8121522` (本地时间 8月12日 15:22, MMDDHHMM 月去前导零)
 - preview tag 指向: `cb91b45df0279a51dbd03aa8aab84e290d5bfe8e`
-- main HEAD: `cb91b45` (覆盖了先前错版本号的 `1a96e07`)
 - Release notes: `docs/release-notes.md` (4 节: C1/C2/C3/C4 + 体验优化)
 - 完整发布流程见 `docs/versioning.md` + `desktop/README.md` 第 82-96 行
 
@@ -18,12 +17,53 @@ CI 构建完成后, 维护者需要:
 2. 把 `docs/release-notes.md` 内容粘进 GitHub Release body (updater 弹窗从这里读)
 3. 如发现 bug, 用预览版号模式再 bump 一次 + 更新 release notes
 
+## main HEAD 相对于 preview 的差
+
+**main HEAD = `07b23dd`**, 比 preview tag (`cb91b45`) 多了 **1 个 commit**:
+
+| commit | 内容 |
+|---|---|
+| `07b23dd` | **fix**: 项目编辑改走更新路由而非误建 + 项目级删除收敛到侧滑/菜单并加强二次确认 (编辑表单 action 按模式路由; 删除改侧滑/菜单 + 红字二次确认; 新增 i-chevron-right / i-more-horizontal; STYLE_VERSION → 20260813a) |
+
+**已决定**: 这个 UX 修复**单独 bump 一个新 preview** 发出去 (不走 v0.4.6 正式版), 让预览用户先验,稳定后再考虑转 v0.4.6 正式版或归到 v0.4.7。
+计划发: **`0.4.6-preview.08241339`** (本地时间 2026-08-24 13:39, MMDDHHMM = 08241339)
+
+## 下一步具体动作 (接手者从这里开始)
+
+1. **跑 PyInstaller 冒烟** (高优先级, 发版前必跑, 见 [[workbench-gotchas]]):
+   ```bash
+   cd ~/workbench/desktop/sidecar
+   .venv/bin/python -m PyInstaller --clean --noconfirm workbench-server.spec
+   ```
+   确认无报错 + 二进制能起来。
+
+2. **Bump 新 preview 把 07b23dd 包出去**:
+   ```bash
+   cd ~/workbench
+   python scripts/sync_version.py 0.4.6-preview.08241339
+   # 更新 docs/release-notes.md (整体覆盖, 不是追加; 见 workbench-release-workflow)
+   #   - 顶部标题改 v0.4.6-preview.08241339
+   #   - 新增一节「项目编辑/删除 UX 改进」描述 07b23dd 改了什么
+   #   - C1-C4 节保留, 但加一行 "相对前一预览版的增量" 提示
+   git add VERSION desktop/package.json desktop/src-tauri/Cargo.toml docs/release-notes.md
+   git commit -m "chore: bump 预览版 08241339（项目编辑/删除 UX 改进）"
+   git push --force-with-lease origin main          # AskUserQuestion 先确认
+   git push origin HEAD:refs/tags/preview --force
+   ```
+
+3. **CI 触发后**: 去 GitHub Releases 把 `preview` draft 转正式 (保留 prerelease 标记), body 贴新 release notes。
+
+4. **如果不打算马上发**: 也行, 至少把 current-status.md 这份「计划发什么」记下来, 下次来直接照做。
+
+5. **思维导图连线交互**: `.claude/plans/dynamic-scribbling-hamming.md` 文件**已丢失**, 需要重新整理 6 个备选方案给用户挑。
+
 ## 最近一轮已完成的功能 (commit 历史)
 
 按时间倒序:
 
 | commit | 内容 | 备注 |
 |---|---|---|
+| `07b23dd` | **fix**: 项目编辑改走更新路由 + 删除收敛到侧滑/菜单 + 二次确认 UX | preview tag 之后, 准备单独 bump 新 preview |
 | `cb91b45` | chore: bump 预览版 8121522 | preview tag |
 | `cd55eda` | **C4**: 拖拽改子目录 + 子目录改名 | API: `/api/artifacts/{id}/move` + `/api/folders/rename` |
 | `ea1230e` | **C3**: 项目级自定义类别 + 类别下子目录 | `Project.categories_json` 字段 + 项目设置页 UI |
@@ -35,51 +75,55 @@ CI 构建完成后, 维护者需要:
 C1-C4 围绕「文件与成果」栏目展开, 用户反馈驱动:
 - C1 是用户提的「创建实验默认选第一个目标」bug
 - C2-C4 是用户提的「图片结果比较乱, 想分类 / 子目录可折叠 / 可拖拽 / 可改名」
+- `07b23dd` 是用户提的「编辑项目老误建 / 删除按钮太显眼」bug
 
 ## 待办 / 搁置中的事
 
-### 1. 思维导图连线交互方式选择 (优先级: 中)
-
-文件: `.claude/plans/dynamic-scribbling-hamming.md`
-
-背景: 上一轮改了「选中节点后点另一个节点自动连边」用户嫌太激进. 准备了 6 个备选方案 (A 锚点拖拽 / B Alt+点击 / C 双击准备态 / D 显式按钮 / E 悬停+按钮 / F Ctrl+点击). 用户没选, plan 文件还在.
-
-下次先问用户挑哪个再动手.
-
-### 2. 桌面端 PyInstaller 冒烟 (优先级: 高, 每次发版前必跑)
+### 1. 桌面端 PyInstaller 冒烟 (优先级: 🔴 高, 每次发版前必跑)
 
 `desktop/README.md:181-183` 提到的检查清单:
 ```bash
-cd desktop/sidecar
+cd ~/workbench/desktop/sidecar
 .venv/bin/python -m PyInstaller --clean --noconfirm workbench-server.spec
 ```
-本轮没跑过, 直接打 tag 推到 CI 了. 下次正式发 v0.4.6 之前必须跑一次.
+本轮没跑过, 直接打 tag 推到 CI 了. **正式发 v0.4.6-preview.08240937 之前必须跑一次**, 不然桌面端更新了用户装上起不来就麻烦.
 
-### 3. C4 的拖拽手势 / 交互细节打磨 (优先级: 低)
+### 2. 思维导图连线交互方式选择 (优先级: 🟡 中)
+
+~~文件: `.claude/plans/dynamic-scribbling-hamming.md`~~ — **plan 文件已丢失** (2026-08-24 接手时发现)。
+
+背景: 上一轮改了「选中节点后点另一个节点自动连边」用户嫌太激进. 当时准备了 6 个备选方案 (A 锚点拖拽 / B Alt+点击 / C 双击准备态 / D 显式按钮 / E 悬停+按钮 / F Ctrl+点击). 用户没选, 现在 plan 文件也没了.
+
+**下次接手**: 需要重新整理 6 个备选方案给用户挑, 再动手实现. 不要凭印象直接挑一个做.
+
+### 3. C4 的拖拽手势 / 交互细节打磨 (优先级: 🟢 低)
 
 - 拖拽时缩略图半透明, 但没有拖拽预览 (cursor 跟手)
 - 折叠的 folder 也能接收拖拽, 但拖到 summary 边框附近才高亮, 中间一大片没反应
 - 改名 input 验证: 空 / 重名 / 与现有 folder 重合的检查只在服务端, 客户端不预检
 
-### 4. tags / labels 体系重构 (优先级: 低, 之前讨论过)
+### 4. tags / labels 体系重构 (优先级: 🟢 低, 之前讨论过)
 
 项目标签 (现在 `Project.tags`, 逗号分隔字符串) 太简陋, 想做成结构化 tag 表. 没动.
 
-### 5. 国际化 / 英文版 (优先级: 低)
+### 5. 国际化 / 英文版 (优先级: 🟢 低)
 
 整个 UI 都是中文, 没考虑过 i18n. 提到过, 没动.
 
 ## 后台清理
 
 - 已清掉端口 8000-8019 上的 20 个残留 uvicorn 进程 (2026-08-12)
-- 当前没有遗留后台 workbench
+- 当前进程 (2026-08-24 09:37 实测):
+  - `uvicorn app.main:app` PID **10760** (在 8000 端口监听)
+  - `start.py` PID **10653** (估计是它拉起的 uvicorn, 自己也跑着)
+  - `curl http://127.0.0.1:8000/` → HTTP 200, 15ms
 
 ## 本地开发状态
 
-- 服务跑在哪个端口? **没跑**. 上次 `kill -9` 清完后没重启. 下次想本地看效果直接:
-  ```bash
-  nohup .venv/bin/python -m uvicorn app.main:app --host 127.0.0.1 --port 8000 > /tmp/wb.log 2>&1 &
-  ```
+- **服务在跑**, 端口 8000。`./run.sh --dev` / `./run.sh` 都能再开一份, 注意端口别冲突。
+- **日志位置**: uvicorn 进程的 stdout 当前**没有重定向到文件** (lsof 看 fd 1/2 没指向任何 /tmp/wb*.log, 估计是 start.py 进程继承了它的 stdout)。
+  - 临时看输出: `lsof -p 10760 | grep -E ' (1u|2u) '` 找 TTY, 或直接 `curl :8000` 验活。
+  - 重启并写日志: `kill 10760; nohup .venv/bin/python -m uvicorn app.main:app --host 127.0.0.1 --port 8000 > /tmp/wb.log 2>&1 &`
 - 数据库: `data/workbench.db` (test 数据混在里面, 如要干净快照 `cp data/workbench.db /tmp/before.db`)
 
 ## 重要约束 (用户偏好, 不要违反)
@@ -96,4 +140,4 @@ cd desktop/sidecar
 - `docs/release-notes.md` — 最新 release notes (本轮预览版)
 - `docs/troubleshooting.md` — 历史踩坑 (NSIS / ACL / 单实例 / semver 限制)
 - `desktop/README.md` 第 75-117 行 — 桌面端发布 + updater 双轨
-- `.claude/plans/dynamic-scribbling-hamming.md` — 思维导图连线交互方案 (待决策)
+- `.claude/plans/dynamic-scribbling-hamming.md` — ~~思维导图连线交互方案~~ **文件已丢失, 待重写**

@@ -22,6 +22,7 @@ URL 设计：
 
 from __future__ import annotations
 
+import json
 import os
 import shutil
 import tempfile
@@ -73,6 +74,7 @@ def _format_config(value: dict | None) -> str:
 
 templates.env.filters["fmt_dt"] = _format_dt
 templates.env.filters["fmt_config"] = _format_config
+templates.env.filters["tojson"] = lambda v: json.dumps(v, ensure_ascii=False)
 
 # Markdown 渲染（python-markdown 已装的话）
 try:
@@ -854,6 +856,32 @@ def add_metric(
     )
     # 提交后回到「上传结果」页(用户加指标就是在这一页)
     return RedirectResponse(f"/experiments/{experiment_id}/results", status_code=303)
+
+
+@router.post("/experiments/{experiment_id}/metrics/batch")
+def add_metrics_batch(
+    experiment_id: int,
+    payload: schemas.MetricBatchCreate,
+    db: Session = Depends(get_db),
+):
+    """批量录入指标。前端先把文本解析成 [{key,value,note}, ...] 再发过来。
+
+    字段校验交给 Pydantic (key 1-100 字符 / value 是数字 / note 是字符串),
+    **任一行不合规整批 422 拒绝** (Pydantic 默认行为)。
+
+    重复策略: 不去重, 同 key+note 可重复添加 (timestamp 取当前时间)。
+    """
+    exp = crud.get_experiment(db, experiment_id)
+    if exp is None:
+        raise HTTPException(404, "Experiment not found")
+
+    for m in payload.items:
+        crud.create_metric(
+            db, experiment_id,
+            schemas.MetricCreate(key=m.key.strip(), value=float(m.value), note=m.note),
+        )
+
+    return {"ok": True, "created": len(payload.items)}
 
 
 @router.post("/metrics/{metric_id}/delete")
