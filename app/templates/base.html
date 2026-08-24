@@ -374,7 +374,9 @@ function selectQuickType(btn) {
     document.addEventListener("keydown", function (e) {
         if (e.ctrlKey && (e.key === "k" || e.key === "K")) {
             e.preventDefault();
-            if (searchInput) searchInput.focus();
+            // 搜索框被 CSS 隐藏（如思维导图页 .topbar-center{display:none}）时不聚焦，
+            // 避免焦点落到隐藏输入框、吞掉页面自身的键盘快捷键
+            if (searchInput && searchInput.offsetParent !== null) searchInput.focus();
         } else if (e.ctrlKey && (e.key === "n" || e.key === "N")) {
             e.preventDefault();
             if (createBtn && createMenu) toggleQuickCreate();

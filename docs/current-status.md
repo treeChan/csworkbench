@@ -4,12 +4,12 @@
 
 ## 最近一次发布
 
-**v0.4.6-preview.8121522** (`cb91b45`) — preview tag 推到了这个 commit, CI 已触发三平台构建.
+**v0.4.6-preview.08241522** (`4eea59c`) — 版本号已 bump, release notes 已更新 (Plotly 图表逐条勾选 + 删除跳转 + key:value 解析).
 
 发布相关:
-- 版本号: `0.4.6-preview.8121522` (本地时间 8月12日 15:22, MMDDHHMM 月去前导零)
-- preview tag 指向: `cb91b45df0279a51dbd03aa8aab84e290d5bfe8e`
-- Release notes: `docs/release-notes.md` (4 节: C1/C2/C3/C4 + 体验优化)
+- 版本号: `0.4.6-preview.08241522` (本地时间 8月24日 15:22, MMDDHHMM 月去前导零)
+- **preview tag 尚未同步**: 仍指向 `cb91b45` (v0.4.6-preview.8121522)。`4eea59c`/`458910c` 两个 bump 提交都发了, 但 `git tag preview` 没 force push 过去 → **预览用户还收不到 08241339/08241522**。下次发布前需 `git push origin HEAD:refs/tags/preview --force` (force push 前 AskUserQuestion 确认)。
+- Release notes: `docs/release-notes.md` (最近一轮预览版)
 - 完整发布流程见 `docs/versioning.md` + `desktop/README.md` 第 82-96 行
 
 CI 构建完成后, 维护者需要:
@@ -19,14 +19,18 @@ CI 构建完成后, 维护者需要:
 
 ## main HEAD 相对于 preview 的差
 
-**main HEAD = `07b23dd`**, 比 preview tag (`cb91b45`) 多了 **1 个 commit**:
+**main HEAD = `4eea59c`**, 比 preview tag (`cb91b45`) 多了 **5 个 commit + 1 个待提交改动**:
 
 | commit | 内容 |
 |---|---|
-| `07b23dd` | **fix**: 项目编辑改走更新路由而非误建 + 项目级删除收敛到侧滑/菜单并加强二次确认 (编辑表单 action 按模式路由; 删除改侧滑/菜单 + 红字二次确认; 新增 i-chevron-right / i-more-horizontal; STYLE_VERSION → 20260813a) |
+| *(工作区待提交)* | **fix**: 思维导图编辑页布局修复 (左栏固定 84px / 工具栏带文字按钮自适应 / 恢复被 `{% block scripts %}` 清空的全局脚本 / 画布高度改填满网格; STYLE_VERSION → 20260824a) |
+| `4eea59c` | **chore**: bump 预览版 08241522 (图表逐条勾选 + 删除跳转 + key:value 解析) |
+| `458910c` | **chore**: bump 预览版 08241339 (Plotly 图表区 + 批量粘贴 + UX 改进) |
+| `7ca1abf` | **feat**: 项目「当前研究阶段」加数据佐证条 (手动标签 + 统计依据, 方案 A) |
+| `07b23dd` | **fix**: 项目编辑改走更新路由而非误建 + 项目级删除收敛到侧滑/菜单并加强二次确认 (编辑表单 action 按模式路由; 删除改侧滑/菜单 + 红字二次确认; 新增 i-chevron-right / i-more-horizontal) |
+| `96bcf05` | **docs**: 记录当前工作进展 (8121522 发布状态 + 待办清单) |
 
-**已决定**: 这个 UX 修复**单独 bump 一个新 preview** 发出去 (不走 v0.4.6 正式版), 让预览用户先验,稳定后再考虑转 v0.4.6 正式版或归到 v0.4.7。
-计划发: **`0.4.6-preview.08241339`** (本地时间 2026-08-24 13:39, MMDDHHMM = 08241339)
+**已决定**: 思维导图布局修复**攒入下一次 preview** 发出去 (用户偏好攒功能、不逐条 bump), 不单独发。preview tag 同步动作见「下一步具体动作」第 2 条。
 
 ## 下一步具体动作 (接手者从这里开始)
 
@@ -35,27 +39,19 @@ CI 构建完成后, 维护者需要:
    cd ~/workbench/desktop/sidecar
    .venv/bin/python -m PyInstaller --clean --noconfirm workbench-server.spec
    ```
-   确认无报错 + 二进制能起来。
+   确认无报错 + 二进制能起来。**从 08241339 到现在 (含 Plotly 图表 + 布局修复) 一直没跑过, 正式发 v0.4.6 前必须跑一次。**
 
-2. **Bump 新 preview 把 07b23dd 包出去**:
+2. **同步 preview tag** (📌 待办, 预览用户卡在 8121522 收不到新预览):
    ```bash
    cd ~/workbench
-   python scripts/sync_version.py 0.4.6-preview.08241339
-   # 更新 docs/release-notes.md (整体覆盖, 不是追加; 见 workbench-release-workflow)
-   #   - 顶部标题改 v0.4.6-preview.08241339
-   #   - 新增一节「项目编辑/删除 UX 改进」描述 07b23dd 改了什么
-   #   - C1-C4 节保留, 但加一行 "相对前一预览版的增量" 提示
-   git add VERSION desktop/package.json desktop/src-tauri/Cargo.toml docs/release-notes.md
-   git commit -m "chore: bump 预览版 08241339（项目编辑/删除 UX 改进）"
-   git push --force-with-lease origin main          # AskUserQuestion 先确认
-   git push origin HEAD:refs/tags/preview --force
+   git push origin HEAD:refs/tags/preview --force     # force push, AskUserQuestion 先确认
+   git push --force-with-lease origin main            # 如有本地独有 commit 再推
    ```
+   tag 应指向当前含最新功能 (至少含 4eea59c) 的 commit; 推完去 GitHub Releases 把 draft 转正式 + 贴 release notes。
 
-3. **CI 触发后**: 去 GitHub Releases 把 `preview` draft 转正式 (保留 prerelease 标记), body 贴新 release notes。
+3. **下次 bump 新 preview 时**: 把攒的思维导图布局修复 (main 上待发 commit) 一并写进 `docs/release-notes.md` (整体覆盖, 不是追加) + 更新 VERSION, 流程见 `docs/versioning.md` + `desktop/README.md`。
 
-4. **如果不打算马上发**: 也行, 至少把 current-status.md 这份「计划发什么」记下来, 下次来直接照做。
-
-5. **思维导图连线交互**: `.claude/plans/dynamic-scribbling-hamming.md` 文件**已丢失**, 需要重新整理 6 个备选方案给用户挑。
+4. **思维导图连线交互**: `.claude/plans/dynamic-scribbling-hamming.md` 文件**已丢失**, 需要重新整理 6 个备选方案给用户挑。
 
 ## 最近一轮已完成的功能 (commit 历史)
 
@@ -63,8 +59,13 @@ CI 构建完成后, 维护者需要:
 
 | commit | 内容 | 备注 |
 |---|---|---|
-| `07b23dd` | **fix**: 项目编辑改走更新路由 + 删除收敛到侧滑/菜单 + 二次确认 UX | preview tag 之后, 准备单独 bump 新 preview |
-| `cb91b45` | chore: bump 预览版 8121522 | preview tag |
+| *(待提交)* | **fix**: 思维导图编辑页布局修复 (左栏固定 84px / 工具栏文字按钮自适应 / 恢复全局脚本 / 画布高度修正) | 攒入下次 preview |
+| `4eea59c` | chore: bump 预览版 08241522 | 上游: 图表逐条勾选 + 删除跳转 + key:value 解析 |
+| `458910c` | chore: bump 预览版 08241339 | 上游: Plotly 图表区 + 批量粘贴 + UX 改进 |
+| `7ca1abf` | **feat**: 项目「当前研究阶段」加数据佐证条 (方案 A) | 手动标签 + 统计依据 |
+| `07b23dd` | **fix**: 项目编辑改走更新路由 + 删除收敛到侧滑/菜单 + 二次确认 UX | 编辑表单 action 按模式路由 |
+| `96bcf05` | docs: 记录当前工作进展 (8121522 发布状态 + 待办清单) | 维护性 commit |
+| `cb91b45` | chore: bump 预览版 8121522 | **preview tag 目前仍指这里** |
 | `cd55eda` | **C4**: 拖拽改子目录 + 子目录改名 | API: `/api/artifacts/{id}/move` + `/api/folders/rename` |
 | `ea1230e` | **C3**: 项目级自定义类别 + 类别下子目录 | `Project.categories_json` 字段 + 项目设置页 UI |
 | `9f814b7` | **C2**: 文件树 + 缩略图网格 + 灯箱 | `build_artifact_tree` 在 Python 端构建, Jinja 只渲染 |
@@ -76,6 +77,7 @@ C1-C4 围绕「文件与成果」栏目展开, 用户反馈驱动:
 - C1 是用户提的「创建实验默认选第一个目标」bug
 - C2-C4 是用户提的「图片结果比较乱, 想分类 / 子目录可折叠 / 可拖拽 / 可改名」
 - `07b23dd` 是用户提的「编辑项目老误建 / 删除按钮太显眼」bug
+- 思维导图布局修复是用户提的「导图页左栏宽度漂移 / 按钮文字截断 / 全局功能失效」bug
 
 ## 待办 / 搁置中的事
 

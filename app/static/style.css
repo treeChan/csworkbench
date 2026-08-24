@@ -1445,7 +1445,9 @@ button.pipeline-step:focus { outline: 2px solid var(--c-primary-light); outline-
 .mm-page {
     display: flex;
     flex-direction: column;
-    height: calc(100vh - 40px); /* 减去底栏 40px */
+    /* 填满主区网格单元（已扣除顶栏+底栏），避免 calc(100vh-40) 多算导致画布底部被裁 */
+    height: 100%;
+    min-height: 0;
     overflow: hidden;
 }
 
@@ -1535,8 +1537,11 @@ button.pipeline-step:focus { outline: 2px solid var(--c-primary-light); outline-
 }
 
 .mm-tb-btn {
-    width: 32px;
+    min-width: 32px;
+    width: auto;             /* 纯图标按钮≈32px，带文字按钮（入容器/移出/导出等）自适应不截断 */
     height: 30px;
+    padding: 0 8px;
+    white-space: nowrap;
     border: 1px solid var(--c-border);
     background: var(--c-bg);
     border-radius: 5px;
@@ -1561,7 +1566,9 @@ button.pipeline-step:focus { outline: 2px solid var(--c-primary-light); outline-
     margin-left: auto;
     font-size: 11px;
     color: var(--c-text-faint, #94a3b8);
-    white-space: nowrap;
+    white-space: normal;   /* 窄屏可换行，避免 nowrap 把工具栏撑爆/截断 */
+    line-height: 1.5;
+    text-align: right;
 }
 
 .mm-canvas-wrap {

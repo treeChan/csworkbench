@@ -5,7 +5,8 @@
 <style>
 /* 画布占满中间区 + 隐藏 topbar/search 让画布有更多空间 */
 .topbar-center { display: none !important; }
-.layout { grid-template-columns: auto 1fr 0 !important; }
+/* 右侧边栏归零（隐藏），左侧导航保持与全局一致的 84px 固定宽，避免列宽漂移 */
+.layout { grid-template-columns: 84px 1fr 0 !important; }
 .rightbar { display: none !important; }
 .sidebar { grid-column: 1; }
 .main-content { grid-column: 2; padding: 0 !important; }
@@ -177,4 +178,4 @@ window.MM_BOOT = {
 <script src="/static/mindmap.js?v=1786700002" defer></script>
 {% endblock %}
 
-{% block scripts %}{% endblock %}
+{% block scripts %}{{ super() }}{% endblock %}
