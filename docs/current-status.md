@@ -11,6 +11,7 @@
 - 版本文件已同步: VERSION + `desktop/package.json` + `desktop/src-tauri/Cargo.toml` (sync_version.py)。
 - **preview tag**: 本次 commit 提交并 push main 后, force push `preview` tag 到此 commit 触发 CI (force push 前 AskUserQuestion 确认)。
 - **上一版 (`4eea59c`) 的 CI 曾失败**: 该 commit 的 `docs/release-notes.md` 末尾缺换行, read-notes 步骤的 heredoc 解析失败 (`Matching delimiter not found 'EOF'`)。本次已修复: release-notes 末尾补换行 + workflow 该步骤加固 (自动补换行 + 用长串分隔符)。
+- **⚠️ 版本号格式坑 (务必遵守 docs/versioning.md)**: 8月预览版必须用 `824XXXX` (**月去前导零**)。`0824XXXX` 带前导零会被 Cargo 拒绝 (`invalid leading zero in pre-release identifier`)——上游 `08241339`/`08241522` 两个版本号都违反此规则, 从未构建成功过。本次先用错误的 `08241708` 提交后也被 Cargo 拒, 已 amend 为正确的 `8241708`。
 - Release notes: `docs/release-notes.md` (整体覆盖, 本次增量: 思维导图布局修复 + 构建加固)
 - 完整发布流程见 `docs/versioning.md` + `desktop/README.md` 第 82-96 行
 
