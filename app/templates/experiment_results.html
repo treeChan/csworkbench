@@ -149,6 +149,27 @@
                 }
             }
 
+            // 2.5 单列 key:value 格式 (每行 "name: value" 或 "name = value")
+            //    例: "平均角误差: 6.15°" / "loss = 0.5"
+            //    触发条件: 整段无 \t 无 |, 含 : 或 =, 不是 JSON 数组
+            if (!t.includes("\t") && !t.includes("|") && /[:=]/.test(t)) {
+                const lines = t.split(/\r?\n/).filter(l => l.trim());
+                const items = [];
+                for (const line of lines) {
+                    const m = line.match(/^\s*(.+?)\s*[:=]\s*(.+?)\s*$/);
+                    if (!m) continue;
+                    const key = m[1].trim();
+                    // 去常见单位 ° % ‰ (° 角度, % 百分比, ‰ 千分比)
+                    const raw = m[2].trim().replace(/[°%％‰]/g, "");
+                    const value = Number(raw);
+                    if (!key || !Number.isFinite(value)) continue;
+                    items.push({ key, value, note: "" });
+                }
+                if (items.length > 0) {
+                    return { ok: true, items, fmt: "单列 key:value (" + (t.includes("=") ? "=" : ":") + " 分隔)" };
+                }
+            }
+
             // 3. TSV / CSV (Excel 复制粘贴最常见) — 按 \t 或 , 分割
             try {
                 const lines = t.split(/\r?\n/).filter(l => l.trim());
@@ -285,7 +306,7 @@
                 <td>{{ m.note }}</td>
                 <td style="color: var(--c-text-soft); font-size: 12px;">{{ m.timestamp | fmt_dt }}</td>
                 <td>
-                    <form method="post" action="/metrics/{{ m.id }}/delete" style="display:inline;">
+                    <form method="post" action="/experiments/{{ experiment.id }}/metrics/{{ m.id }}/delete" style="display:inline;">
                         <button type="submit" class="btn btn-outline"
                                 style="padding: 1px 6px; font-size: 11px;"
                                 onclick="return confirm('确定删除这条指标？');">×</button>

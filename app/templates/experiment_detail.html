@@ -27,6 +27,42 @@
         border-radius: var(--radius-md); padding: 8px;
     }
     .chart-hint { color: var(--c-text-soft); font-size: 12px; margin-top: 6px; }
+    .chart-title-input {
+        padding: 4px 10px; border: 1px solid var(--c-border);
+        border-radius: var(--radius-md); font-size: 12.5px;
+        background: var(--c-bg); color: var(--c-text);
+        width: 220px;
+    }
+    .chart-title-input::placeholder { color: var(--c-text-faint); }
+    .metric-list {
+        max-height: 220px; overflow-y: auto; margin: 10px 0;
+        border: 1px solid var(--c-border); border-radius: var(--radius-md);
+        background: var(--c-bg);
+    }
+    .metric-row {
+        display: grid; grid-template-columns: 28px 180px 90px 1fr 130px;
+        gap: 10px; padding: 6px 10px; font-size: 12.5px;
+        border-bottom: 1px solid var(--c-border); align-items: center;
+        cursor: pointer;
+    }
+    .metric-row:last-child { border-bottom: none; }
+    .metric-row:hover { background: var(--c-bg-soft); }
+    .metric-row input[type=checkbox] { margin: 0; cursor: pointer; }
+    .metric-row .key { color: var(--c-primary); font-size: 12px; }
+    .metric-row .val { font-family: ui-monospace, monospace; text-align: right; }
+    .metric-row .note { color: var(--c-text); }
+    .metric-row .ts { color: var(--c-text-faint); font-size: 11.5px; font-family: ui-monospace, monospace; }
+    .metric-list-actions {
+        display: flex; gap: 8px; align-items: center; margin: 6px 0;
+        color: var(--c-text-soft); font-size: 12px;
+    }
+    .metric-list-actions button {
+        padding: 3px 10px; border: 1px solid var(--c-border);
+        border-radius: var(--radius-md); background: var(--c-bg);
+        color: var(--c-text); font-size: 12px; cursor: pointer;
+    }
+    .metric-list-actions button:hover { background: var(--c-primary-bg); }
+    .metric-list-actions button:disabled { opacity: 0.5; cursor: not-allowed; }
 </style>
 {% endblock %}
 
@@ -171,8 +207,8 @@
         </h3>
     </div>
     <div class="chart-controls">
-        <label>指标:
-            <select id="chart-key" style="margin-left: 6px;"></select>
+        <label>标题:
+            <input type="text" id="chart-title" class="chart-title-input" placeholder="自动 (第一个勾选指标名)" style="margin-left: 6px;">
         </label>
         <label style="margin-left: 16px;">图表类型:</label>
         <button type="button" class="chart-type-btn active" data-type="bar">条形图</button>
@@ -180,8 +216,18 @@
         <button type="button" class="chart-type-btn" data-type="table">表格</button>
         <button type="button" id="chart-download" style="margin-left: auto;">下载 PNG</button>
     </div>
+
+    <div class="metric-list-actions">
+        <span>选择要画的数据点 (已选 <strong id="selected-count">0</strong> / 共 <span id="total-count">0</span>):</span>
+        <button type="button" id="select-all">全选</button>
+        <button type="button" id="select-none">全不选</button>
+        <button type="button" id="select-invert">反选</button>
+    </div>
+
+    <div class="metric-list" id="metric-list"></div>
+
     <div id="chart-container"></div>
-    <p class="chart-hint">横轴 = 指标记录的「备注」(note) · 纵轴 = 数值 · 每个备注对应一个数据点 (raw, 不聚合)</p>
+    <p class="chart-hint">横轴 = 指标记录的「备注」(note) · 纵轴 = 数值 · 每个备注对应一个数据点 (raw, 不聚合) · 默认全选, 取消勾选可剔除</p>
 </div>
 
 {# 把 metrics 数据序列化为 JSON, 前端 Plotly 直接消费. 用 | safe 防止 Jinja 把 " 转义成 &#34; #}
@@ -199,20 +245,22 @@
     if (!raw.length) return;
 
     const container = document.getElementById("chart-container");
-    const sel = document.getElementById("chart-key");
     const btns = document.querySelectorAll(".chart-type-btn");
     const dl = document.getElementById("chart-download");
+    const titleInput = document.getElementById("chart-title");
+    const listEl = document.getElementById("metric-list");
+    const selCountEl = document.getElementById("selected-count");
+    const totalCountEl = document.getElementById("total-count");
+    const btnAll = document.getElementById("select-all");
+    const btnNone = document.getElementById("select-none");
+    const btnInv = document.getElementById("select-invert");
 
-    // 按 key 分组, 用于 select 选项 (去重)
-    const keys = [...new Set(raw.map(d => d.key))];
-    keys.forEach(k => {
-        const opt = document.createElement("option");
-        opt.value = k;
-        opt.textContent = k;
-        sel.appendChild(opt);
-    });
+    // 给每个 metric 加 idx, 默认全选, 保持原顺序
+    const items = raw.map((d, idx) => ({
+        idx, key: d.key, value: d.value, note: d.note || "", ts: d.ts,
+        selected: true,
+    }));
 
-    let currentKey = keys[0];
     let currentType = "bar";
 
     function getTheme() {
@@ -226,24 +274,56 @@
         };
     }
 
+    function escapeHtml(s) {
+        return String(s).replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+    }
+
     function fmtNote(n) {
         return (n && n.length) ? n : "（无备注）";
     }
 
+    function renderList() {
+        // 按 timestamp 降序展示 (最新的在最上面)
+        const sorted = [...items].sort((a, b) => (a.ts < b.ts ? 1 : a.ts > b.ts ? -1 : 0));
+        let html = "";
+        for (const it of sorted) {
+            html += `<label class="metric-row" data-idx="${it.idx}">
+                <input type="checkbox" data-idx="${it.idx}"${it.selected ? " checked" : ""}>
+                <code class="key">${escapeHtml(it.key)}</code>
+                <span class="val">${it.value.toPrecision(6)}</span>
+                <span class="note">${escapeHtml(fmtNote(it.note))}</span>
+                <span class="ts">${it.ts.replace("T", " ").slice(0, 16)}</span>
+            </label>`;
+        }
+        listEl.innerHTML = html;
+        const sel = items.filter(it => it.selected).length;
+        selCountEl.textContent = sel;
+        totalCountEl.textContent = items.length;
+        btnAll.disabled = items.every(it => it.selected);
+        btnNone.disabled = items.every(it => !it.selected);
+    }
+
+    function getSelected() {
+        return items.filter(it => it.selected)
+            .sort((a, b) => (a.ts < b.ts ? -1 : a.ts > b.ts ? 1 : 0));
+    }
+
     function drawChart() {
+        const pts = getSelected();
         const t = getTheme();
-        const pts = raw.filter(d => d.key === currentKey);
-        // 按 timestamp 升序画图 (横轴 = note, 顺序无所谓; 折线按时间排序更直观)
-        pts.sort((a, b) => (a.ts < b.ts ? -1 : a.ts > b.ts ? 1 : 0));
         const xs = pts.map(d => fmtNote(d.note));
         const ys = pts.map(d => d.value);
         const texts = pts.map(d => d.value.toPrecision(4));
 
+        // 标题: 优先用输入框, 否则 = 第一个勾选 metric 的 key
+        const userTitle = titleInput.value.trim();
+        const defaultTitle = pts.length > 0 ? pts[0].key : "";
+        const chartTitle = userTitle || defaultTitle || "图表";
+
         if (currentType === "table") {
-            // 用 HTML 表格 (Plotly table 体积大, 直接用 DOM 更轻)
-            let html = '<table class="tbl" style="width:100%;"><thead><tr><th>备注</th><th>数值</th><th>记录时间</th></tr></thead><tbody>';
+            let html = '<table class="tbl" style="width:100%;"><thead><tr><th>指标</th><th>备注</th><th>数值</th><th>记录时间</th></tr></thead><tbody>';
             for (const p of pts) {
-                html += `<tr><td>${fmtNote(p.note)}</td><td style="font-family:ui-monospace,monospace;">${p.value.toPrecision(6)}</td><td style="color:${t.text};opacity:0.7;font-size:12px;">${p.ts.replace("T", " ").slice(0, 16)}</td></tr>`;
+                html += `<tr><td><code>${escapeHtml(p.key)}</code></td><td>${escapeHtml(fmtNote(p.note))}</td><td style="font-family:ui-monospace,monospace;">${p.value.toPrecision(6)}</td><td style="color:${t.text};opacity:0.7;font-size:12px;">${p.ts.replace("T", " ").slice(0, 16)}</td></tr>`;
             }
             html += "</tbody></table>";
             container.innerHTML = html;
@@ -252,20 +332,26 @@
         }
 
         dl.style.display = "";
-        const trace = {
-            x: xs,
-            y: ys,
-            text: texts,
+        // 多个 key 同时画时, 按 key 分组做成多条 trace
+        const groups = {};
+        for (const p of pts) {
+            (groups[p.key] || (groups[p.key] = [])).push(p);
+        }
+        const traces = Object.entries(groups).map(([k, arr]) => ({
+            x: arr.map(p => fmtNote(p.note)),
+            y: arr.map(p => p.value),
+            text: arr.map(p => p.value.toPrecision(4)),
             textposition: "outside",
             type: currentType,
             mode: currentType === "line" ? "lines+markers+text" : "markers+text",
+            name: k,
             marker: { color: t.primary, size: 10 },
             line: { color: t.primary, width: 2, shape: "spline" },
-            hovertemplate: "<b>%{x}</b><br>" + currentKey + ": %{y}<extra></extra>"
-        };
+            hovertemplate: "<b>%{x}</b><br>" + k + ": %{y}<extra></extra>"
+        }));
 
         const layout = {
-            title: { text: currentKey + " · " + pts.length + " 个数据点", font: { color: t.text, size: 13 } },
+            title: { text: chartTitle + " · " + pts.length + " 个数据点", font: { color: t.text, size: 13 } },
             xaxis: {
                 title: { text: "备注", font: { color: t.text, size: 11 } },
                 tickangle: -25,
@@ -273,7 +359,7 @@
                 gridcolor: t.grid
             },
             yaxis: {
-                title: { text: currentKey, font: { color: t.text, size: 11 } },
+                title: { text: chartTitle, font: { color: t.text, size: 11 } },
                 tickfont: { color: t.text, size: 11 },
                 gridcolor: t.grid
             },
@@ -281,20 +367,43 @@
             paper_bgcolor: t.paper,
             margin: { t: 36, b: 90, l: 60, r: 16 },
             height: 360,
+            showlegend: Object.keys(groups).length > 1,
             font: { family: "system-ui, -apple-system, sans-serif" }
         };
 
-        Plotly.newPlot(container, [trace], layout, {
+        Plotly.newPlot(container, traces, layout, {
             displaylogo: false,
             responsive: true,
             modeBarButtonsToRemove: ["lasso2d", "select2d"]
         });
     }
 
-    sel.addEventListener("change", e => {
-        currentKey = e.target.value;
+    // 列表事件 (委托)
+    listEl.addEventListener("change", e => {
+        const cb = e.target.closest("input[type=checkbox]");
+        if (!cb) return;
+        const idx = parseInt(cb.dataset.idx, 10);
+        items[idx].selected = cb.checked;
+        renderList();
         drawChart();
     });
+    listEl.addEventListener("click", e => {
+        // 点击行其它位置 → 切换 checkbox
+        if (e.target.tagName === "INPUT") return;
+        const row = e.target.closest(".metric-row");
+        if (!row) return;
+        const idx = parseInt(row.dataset.idx, 10);
+        items[idx].selected = !items[idx].selected;
+        renderList();
+        drawChart();
+    });
+
+    btnAll.addEventListener("click", () => { items.forEach(it => it.selected = true); renderList(); drawChart(); });
+    btnNone.addEventListener("click", () => { items.forEach(it => it.selected = false); renderList(); drawChart(); });
+    btnInv.addEventListener("click", () => { items.forEach(it => it.selected = !it.selected); renderList(); drawChart(); });
+
+    titleInput.addEventListener("input", drawChart);
+
     btns.forEach(b => {
         b.addEventListener("click", () => {
             currentType = b.dataset.type;
@@ -304,7 +413,7 @@
     });
     dl.addEventListener("click", () => {
         if (currentType === "table") return;
-        const safeName = (currentKey || "chart").replace(/[^a-z0-9_一-龥\-]+/gi, "_");
+        const safeName = (titleInput.value.trim() || "chart").replace(/[^a-z0-9_一-龥\-]+/gi, "_");
         Plotly.downloadImage(container, {
             format: "png",
             width: 1200,
@@ -313,6 +422,7 @@
         });
     });
 
+    renderList();
     drawChart();
 })();
 </script>

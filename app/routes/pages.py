@@ -896,6 +896,27 @@ def remove_metric(
     return RedirectResponse(f"/experiments/{exp_id}", status_code=303)
 
 
+@router.post("/experiments/{experiment_id}/metrics/{metric_id}/delete")
+def remove_metric_in_results(
+    experiment_id: int,
+    metric_id: int,
+    db: Session = Depends(get_db),
+) -> RedirectResponse:
+    """从「上传结果」页删除指标 — 删除后留在 results 页, 方便多次编辑。
+
+    比 /metrics/{id}/delete 多一层 experiment_id 校验, 防止误删 (别人的 metric)。
+    旧端点保留作 fallback, 其它位置 (如有) 仍能跳回实验详情。
+    """
+    exp = crud.get_experiment(db, experiment_id)
+    if exp is None:
+        raise HTTPException(404, "Experiment not found")
+    metric = db.get(models.Metric, metric_id)
+    if metric is None or metric.experiment_id != experiment_id:
+        raise HTTPException(404, "Metric not found in this experiment")
+    crud.delete_metric(db, metric)
+    return RedirectResponse(f"/experiments/{experiment_id}/results", status_code=303)
+
+
 @router.post("/experiments/{experiment_id}/notes")
 def add_note(
     experiment_id: int,
