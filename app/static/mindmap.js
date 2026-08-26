@@ -348,6 +348,7 @@
             "data-kind": node.kind,
             "data-shape": node.shape_type,
             "data-font-size": String(node.font_size != null ? node.font_size : 13),
+            "data-font-family": node.font_family || "system",
             "data-w": String(node.w),
             "data-h": String(node.h),
             transform: `translate(${node.x},${node.y})`,
@@ -375,6 +376,11 @@
         const labelStyleParts = [];
         if (node.font_size) labelStyleParts.push("font-size:" + node.font_size + "px");
         if (node.font_color) labelStyleParts.push("color:" + node.font_color);
+        // 字体栈：整节点替换（改字号/颜色/undo 等）后 font-family 不能再丢，
+        // 之前 buildNodeEl 只带 font-size + color，改字体后一碰其他操作就恢复默认
+        if (node.font_family && node.font_family !== "system") {
+            labelStyleParts.push("font-family:" + (FONT_STACKS[node.font_family] || FONT_STACKS.system));
+        }
         if (labelStyleParts.length) labelDiv.setAttribute("style", labelStyleParts.join(";"));
         // 容器有专用 label: 显示在角落的 "容器" 角标 + 用户 label (可空)
         if (node.shape_type === "container") {
@@ -1201,7 +1207,14 @@
                 if (t.before === family) continue;
                 t.el.setAttribute("data-font-family", family);
                 const lbl = t.el.querySelector(".mm-label");
-                if (lbl) lbl.setAttribute("style", "font-size:" + (lbl.style.fontSize || "13px") + ";font-family:" + FONT_STACKS[family]);
+                if (lbl) {
+                    // 只替换 font-family 段，保留已有的 font-size / color。
+                    // 之前整段覆盖 style 会把节点的自定义字色冲掉。
+                    const cur = lbl.getAttribute("style") || "";
+                    const withoutF = cur.replace(/font-family:[^;]*;?/g, "").trim();
+                    const font = "font-size:" + (lbl.style.fontSize || "13px") + ";font-family:" + FONT_STACKS[family];
+                    lbl.setAttribute("style", withoutF ? withoutF + ";" + font : font);
+                }
                 await api("/api/mindmap/nodes/" + t.id, {
                     method: "PATCH", body: { font_family: family },
                 });
@@ -1237,11 +1250,10 @@
                 // Shift+点击 → 多选切换
                 selectNode(el, { additive: true });
             } else if (selectedNodes.has(el)) {
-                // 点击已选中的唯一节点 → 取消选中, 隐藏锚点
-                if (selectedNodes.size === 1) {
-                    clearSelection();
-                }
-                // 多选状态下点击某个 → 保持当前多选 (Figma 行为)
+                // 已选中的节点再次按下：保持选中作为拖动起点。
+                // 之前这里单击会取消选中，导致选中后无法直接拖动
+                // （构建 dragItems 时 selectedNodes 已被清空，拖不动）。
+                // 取消选中统一交给点空白 / Esc / 框选。
             } else {
                 // 普通点击: 单选 (清空其他). 不会自动连边, 连边请拖锚点.
                 selectNode(el);

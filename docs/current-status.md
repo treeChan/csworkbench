@@ -59,6 +59,7 @@ CI 构建完成后, 维护者需要:
 
 | commit | 内容 | 备注 |
 |---|---|---|
+| `<本次>` | **fix**: 思维导图编辑全面修复 | ⚠️ 不能编辑根因 (syncDiff 缺 `\| safe` → MM_BOOT 语法错误) + 选中后拖不动 / 字体丢失 / 箭头方向 / 按钮改名; HTML 加 no-cache |
 | `<本次>` | **chore**: bump 预览版 8241708 | 思维导图布局修复 + CI read-notes 加固 |
 | `2f6740e` | **fix**: 思维导图编辑页布局修复 | 左栏固定 84px / 工具栏文字按钮自适应 / 恢复全局脚本 / 画布高度修正 |
 | `4eea59c` | chore: bump 预览版 08241522 | 上游: 图表逐条勾选 + 删除跳转 + key:value 解析; ⚠️ 该版 CI 因 release-notes 缺换行失败 |
@@ -136,6 +137,7 @@ cd ~/workbench/desktop/sidecar
 - 版本号格式 `x.y.z-preview.MMDDHHMM`, **月去前导零、日时分补零**
 - preview tag 固定叫 `preview`, 每次 force push 滚动
 - commit message 中文, 简短描述 + 在 body 里写「详见 docs/release-notes.md」
+- **模板 `<script>` 里的 `| tojson` 必须加 `| safe`**: 项目自定义了 tojson filter (pages.py, 返回普通 str 而非 Markup), autoescape 会把 `"` 转义成 `&#34;`, 而 `<script>` 是 raw text 不解码实体 → 整段 JS 语法错误。思维导图从 08241339 起不能编辑就是这个根因 (syncDiff 漏加 safe), 已修。
 
 ## 相关文档索引
 

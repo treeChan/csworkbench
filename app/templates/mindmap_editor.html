@@ -51,8 +51,8 @@
         <div class="mm-toolbar-sep"></div>
         <div class="mm-toolbar-group">
             <span class="mm-toolbar-label">容器</span>
-            <button class="mm-tb-btn mm-container-btn" data-shape="container" title="新建容器节点 (虚线紫框, 可装其他节点)">▣</button>
-            <button id="mm-pick-container-btn" class="mm-tb-btn" title="选中节点后点此, 再点目标容器加入">入容器</button>
+            <button class="mm-tb-btn mm-container-btn" data-shape="container" title="新建容器节点 (虚线紫框, 可装其他节点)">新建</button>
+            <button id="mm-pick-container-btn" class="mm-tb-btn" title="选中节点后点此, 再点目标容器加入">移入</button>
             <button id="mm-ungroup-btn" class="mm-tb-btn" title="把选中节点移出所在容器">移出</button>
         </div>
 
@@ -119,9 +119,12 @@
                     <path d="M 24 0 L 0 0 0 24" fill="none"
                           stroke="var(--c-border, #e5e7eb)" stroke-width="0.5"/>
                 </pattern>
-                <!-- 连线箭头 marker（auto edges 不挂箭头；手动连线按 data-arrow 决定） -->
+                <!-- 连线箭头 marker（auto edges 不挂箭头；手动连线按 data-arrow 决定）。
+                     orient 必须用 "auto"（沿路径终点切线旋转，上下左右都行）。
+                     曾用 "auto-start-reverse"，WebKitGTK/WKWebView 对它支持不佳，
+                     箭头固定朝右不旋转——上下排列的节点连线箭头就不会指上/指下。 -->
                 <marker id="mm-arrow" viewBox="0 0 10 10" refX="9" refY="5"
-                        markerWidth="8" markerHeight="8" orient="auto-start-reverse">
+                        markerWidth="8" markerHeight="8" orient="auto">
                     <path d="M 0 0 L 10 5 L 0 10 z" style="fill: var(--c-primary, #7C3AED);"/>
                 </marker>
             </defs>
@@ -172,10 +175,10 @@ window.MM_BOOT = {
     autoCount: {{ auto_count }},
     manualCount: {{ manual_count }},
     edgeCount: {{ edge_count }},
-    syncDiff: {{ sync_diff | tojson }}
+    syncDiff: {{ sync_diff | tojson | safe }}
 };
 </script>
-<script src="/static/mindmap.js?v=1786700002" defer></script>
+<script src="/static/mindmap.js?v=1787586717" defer></script>
 {% endblock %}
 
 {% block scripts %}{{ super() }}{% endblock %}

@@ -50,7 +50,7 @@ TEMPLATES_DIR = BASE_DIR / "templates"
 
 # 静态资源缓存版本号：改 style.css / base.html 内嵌样式后 bump 此值，
 # 浏览器强制重新下载（对应 base.html 的 style.css?v={{ style_version }}）
-STYLE_VERSION = "20260824a"
+STYLE_VERSION = "20260824b"
 
 templates = Jinja2Templates(directory=str(TEMPLATES_DIR))
 
@@ -182,7 +182,13 @@ def render(
         **ctx_in,
         **kwargs,
     }
-    return templates.TemplateResponse(request, name, ctx, status_code=status_code)
+    # HTML 一律 no-cache：页面是服务端动态渲染的（版本号、project 等随数据变化），
+    # 浏览器启发式缓存旧 HTML 会拿到过期内容（曾踩坑：旧 HTML 里 syncDiff 的
+    # `&#34;` 实体导致 MM_BOOT 语法错误、思维导图完全不能编辑）。
+    return templates.TemplateResponse(
+        request, name, ctx, status_code=status_code,
+        headers={"Cache-Control": "no-cache"},
+    )
 
 
 def _infer_active_project(request: Request, db) -> models.Project | None:
@@ -1455,6 +1461,10 @@ def _render_mindmap_node(node) -> str:
     # 自定义填色 / 字色 (None 时 CSS 用默认, 这里不写属性保持简洁)
     fill_attr = f' data-fill-color="{xml_escape(node.fill_color)}"' if node.fill_color else ""
     font_attr = f' data-font-color="{xml_escape(node.font_color)}"' if node.font_color else ""
+    # 字体族写进 data 属性：首屏 label style 里已有 font-family，但缺 data-font-family
+    # 会让前端整节点替换（改字号/颜色/undo）后字体丢失 → 一并带上
+    font_family = getattr(node, "font_family", None) or "system"
+    font_family_attr = f' data-font-family="{xml_escape(font_family)}"'
 
     g_open = (
         f'<g class="mm-node {kind_cls} {shape_cls}" '
@@ -1463,7 +1473,7 @@ def _render_mindmap_node(node) -> str:
         f'data-shape="{xml_escape(node.shape_type)}"'
         f'{parent_attr}{z_attr}{container_attr} '
         f'data-w="{w}" data-h="{h}" '
-        f'{fill_attr}{font_attr} '
+        f'{fill_attr}{font_attr}{font_family_attr} '
         f'transform="translate({x},{y})">'
     )
 
@@ -1518,8 +1528,7 @@ def _render_mindmap_node(node) -> str:
         font_size = 8
     elif font_size > 96:
         font_size = 96
-    font_family = getattr(node, "font_family", None) or "system"
-    # 容错：未知值回退到 system（前端 CSS 也有兜底）
+    # font_family 已在函数顶部计算；未知值回退到 system（前端 CSS 也有兜底）
     from app.schemas import FONT_FAMILIES
     family_stack = FONT_FAMILIES.get(font_family, FONT_FAMILIES["system"])
     # 自定义字色
