@@ -15,9 +15,10 @@ APP = REPO / "app"
 datas, binaries, hiddenimports = [], [], []
 
 # 依赖打包:collect_all 收集数据文件/二进制/隐藏导入,copy_metadata 保留包元数据
+# v0.4.6 冷启动优化:markdown 只用基础 markdown() API,不需要 extensions,跳过 collect_all
 PKGS = [
     "fastapi", "starlette", "uvicorn", "pydantic", "pydantic_settings",
-    "pydantic_core", "sqlalchemy", "jinja2", "markdown", "h11",
+    "pydantic_core", "sqlalchemy", "jinja2", "h11",
     "multipart", "greenlet", "anyio", "click", "typing_extensions",
 ]
 for p in PKGS:
@@ -58,7 +59,19 @@ a = Analysis(
     hiddenimports=hiddenimports,
     hookspath=[],
     runtime_hooks=[],
-    excludes=["tkinter", "unittest", "numpy", "pandas", "matplotlib"],
+    excludes=[
+        "tkinter", "unittest", "numpy", "pandas", "matplotlib",
+        # 冷启动优化（v0.4.6 起）：明确排除不用的 sqlalchemy dialects（只用 sqlite），
+        # 以及 sqlalchemy.testing / pydantic.deprecated 等纯测试/弃用模块。
+        # excludes 优先于 collect_submodules，可放心加。
+        "sqlalchemy.testing", "sqlalchemy.testing.*",
+        "sqlalchemy.dialects.firebird", "sqlalchemy.dialects.mssql",
+        "sqlalchemy.dialects.oracle", "sqlalchemy.dialects.postgresql",
+        "sqlalchemy.dialects.mysql", "sqlalchemy.dialects.sybase",
+        "sqlalchemy.dialects.informix", "sqlalchemy.dialects.maxdb",
+        "pydantic.deprecated", "pydantic.deprecated.*",
+        "pydantic.experimental", "pydantic.experimental.*",
+    ],
     noarchive=False,
 )
 
