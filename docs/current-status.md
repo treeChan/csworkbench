@@ -4,20 +4,16 @@
 
 ## 最近一次发布
 
-**v0.4.6** (`9b9e164`) — 桌面端冷启动优化 + 实验图表（Plotly）+ 思维导图编辑全面修复 + 项目页 UX 改进 + 文件与成果栏目重构（C1–C4）+ CI 流程加固。
+**v0.4.6** (`62ce938`) — 桌面端冷启动优化 + 实验图表（Plotly）+ 思维导图编辑全面修复 + 项目页 UX 改进 + 文件与成果栏目重构（C1–C4）+ CI 流程加固。**已于 2026-09-06 发布完成**。
 
-发布相关:
+发布相关（已完成动作）:
 - 版本号: `0.4.6`（从 `0.4.6-preview.8241708` 正式化）
 - 版本文件已同步: `VERSION` + `desktop/package.json` + `desktop/src-tauri/Cargo.toml`（`sync_version.py`）
-- **正式 tag**: `v0.4.6`（在 `9b9e164` 上）— push 后会触发 GitHub Actions 三平台构建（macOS / Windows / Linux），出 macOS `.dmg` / `.app`、Windows `.msi`、Linux `.deb` / `.AppImage`
-- **preview tag 处理**: 之前指向 `4eea59c`（`08241522`）。正式版发布后预览通道应滚动到 `v0.4.6` 本次 commit — 需要 **force-push `preview` tag**（AskUserQuestion 确认，因 `--force` 触发自动拦截弹窗）
+- **正式 tag** `v0.4.6`（在 `62ce938` 上）已推送并构建；**preview tag** 已 force-push 同步到 `62ce938`（预览用户自动升级到正式版）。两个 GitHub Release 均已转正式：`v0.4.6` 取消 prerelease、`preview` 保留 prerelease 标记、body 已贴 release notes。
+- ⚠️ **v0.4.6 发布后发现 updater 清单并发坑**（详见下方「重要约束」与 build-desktop.yml finalize 注释）：
+  preview 的 `latest.json` 被三平台并行覆盖坏成**只剩 linux**，Windows/Mac 预览端检查更新报 `fallback platforms` 找不到。已手动用 v0.4.6 完整清单覆盖修复，并加 CI `finalize` job 治本（commit `<本次>`，见「下一步」第 2 条）。
 - Release notes: `docs/release-notes.md`（**整体覆盖**，整合了 preview `08241522` + `8241708` + 冷启动优化的全部内容）
 - 完整发布流程见 `docs/versioning.md` + `desktop/README.md` 第 75–117 行
-
-CI 构建完成后，维护者需要:
-1. 去 GitHub Releases 把 `v0.4.6` 的 draft 转正式（**取消 `prerelease` 标记**）
-2. 把 `docs/release-notes.md` 内容粘进 GitHub Release body（updater 弹窗从这里读）
-3. preview tag 同步滚动到 `9b9e164`（详见 AskUserQuestion 步骤）
 
 ## 本次发布前的实测数据
 
@@ -27,11 +23,11 @@ CI 构建完成后，维护者需要:
 
 ## main HEAD 相对于上一个 stable 的差
 
-**main HEAD = `9b9e164`**，比上一个 stable (`v0.4.5` = `46bfc20`) 多了 **13 个 commit**：
+**main HEAD = `62ce938`**，比上一个 stable (`v0.4.5` = `46bfc20`) 多了 **13 个 commit**：
 
 | commit | 类型 | 内容 |
 |---|---|---|
-| `9b9e164` | **chore** | bump 正式版 0.4.6（桌面端冷启动优化 + 实验图表/批量录入/项目页 UX 改进） |
+| `62ce938` | **chore** | bump 正式版 0.4.6（桌面端冷启动优化 + 实验图表/批量录入/项目页 UX 改进） |
 | `4ba08b3` | **fix** | 思维导图编辑全面修复（不能编辑根因 `syncDiff` 缺 `\| safe` → MM_BOOT 语法错误；拖动/字体/箭头/按钮；HTML 加 no-cache） |
 | `6c762c5` | docs | 记录版本号格式坑（8月预览版必须月去前导零，`08` 开头被 Cargo 拒） |
 | `8ceca25` | chore | bump 预览版 8241708（思维导图布局修复 + CI read-notes 加固） |
@@ -47,27 +43,15 @@ CI 构建完成后，维护者需要:
 
 ## 下一步具体动作（接手者从这里开始）
 
-1. **push main + 打 v0.4.6 tag**（本次发布动作）:
-   ```bash
-   cd ~/workbench
-   git push origin main                          # fast-forward, 远端只多 1 个 commit
-   git tag v0.4.6
-   git push origin v0.4.6                        # 触发 GitHub Actions 三平台构建
-   ```
+1. **v0.4.6 发布已完成**（2026-09-06）: `main`、`v0.4.6` tag、`preview` tag（= `62ce938`）均已推送，两个 GitHub Release 已转正式。**无需重复 push / tag / 转正式**。
 
-2. **同步 preview tag → 触发回滚确认**（AskUserQuestion 后执行）:
-   预览版用户应自动升级到正式版。把 preview tag force-push 到 `v0.4.6` commit（`9b9e164`）：
-   ```bash
-   git push origin HEAD:refs/tags/preview --force   # force push, 先 AskUserQuestion
-   ```
-   或保留 preview tag 在 `4eea59c` 不动（预览通道继续停留在 `08241522`，用户需要手动切到 stable 通道升级）— **推荐第一种**。
+2. **本次 commit（未发版）—— updater latest.json 并发竞态修复**:
+   - 根因: `build-desktop.yml` 三平台并行矩阵 + tauri-action `includeUpdaterJson` 对同一 `latest.json` 做非原子「下载 → 合并 → 上传」，后写覆盖前写 → 清单随机丢平台。v0.4.6 的 preview 清单曾被覆盖成只剩 linux（Windows 预览端报 `fallback platforms` 找不到）。
+   - 处置: preview 清单已手动用 v0.4.6 完整清单覆盖修复（2026-09-07）。
+   - 治本: workflow 新增 **`finalize` job**（`needs: desktop`），等三平台全部成功后用 `scripts/build_updater_json.py` 从 release 资产重建完整 `latest.json` 并 `--clobber` 覆盖；desktop 矩阵保留 `includeUpdaterJson`（各平台 `.sig` 上传行为不变），其并发产物只是 draft 期中间态。重建 key/url/signature 与 tauri-action 逐项一致（本地比对 v0.4.6 验证过）。
+   - **下次预览/正式发版即走新流程**，latest.json 由 finalize 权威生成，无需人工补清单。
 
-3. **CI 触发后**:
-   - 确认三平台构建均通过（macOS / Windows / Linux）
-   - 通过的 Release 去 GitHub Releases 把 `v0.4.6` draft 转正式（**取消 prerelease 标记**），body 贴最新 release notes
-   - preview tag 若已 force-push，对应 GitHub Release 也转正式（保留 prerelease 标记，但内容应说明「预览通道已与正式版对齐」）
-
-4. **思维导图连线交互**: `.claude/plans/dynamic-scribbling-hamming.md` 文件**已丢失**，需要重新整理 6 个备选方案给用户挑。
+3. **思维导图连线交互**: `.claude/plans/dynamic-scribbling-hamming.md` 文件**已丢失**，需要重新整理 6 个备选方案给用户挑。
 
 ## 待办 / 搁置中的事
 
@@ -117,6 +101,7 @@ CI 构建完成后，维护者需要:
 - preview tag 固定叫 `preview`，每次 force push 滚动
 - commit message 中文，简短描述 + 在 body 里写「详见 docs/release-notes.md」
 - **模板 `<script>` 里的 `| tojson` 必须加 `| safe`**: 项目自定义了 tojson filter（`pages.py`，返回普通 `str` 而非 `Markup`），autoescape 会把 `"` 转义成 `&#34;`，而 `<script>` 是 raw text 不解码实体 → 整段 JS 语法错误。思维导图从 `08241339` 起不能编辑就是这个根因（`syncDiff` 漏加 safe），已修 — 已记入 `workbench-gotchas.md` 第 #18 项。
+- **CI updater `latest.json` 并发坑**: tauri-action 的 `includeUpdaterJson` 在三平台并行矩阵下会对同一 `latest.json` 做非原子「下载→合并→上传」，后写覆盖前写 → 清单随机丢平台（v0.4.6 的 preview 清单曾被覆盖成只剩 linux，Windows/Mac 预览端检查更新报 `"None of the fallback platforms [\"windows-x86_64-nsis\", ...] were found"`）。已由 `build-desktop.yml` 的 **`finalize` job** + `scripts/build_updater_json.py` 治本（重建 key/url/signature 与 tauri-action 逐项一致，比对 v0.4.6 验证过）。**改 CI 时别把 latest.json 写回并行矩阵、别删 finalize**。
 
 ## 相关文档索引
 
@@ -125,4 +110,5 @@ CI 构建完成后，维护者需要:
 - `docs/troubleshooting.md` — 历史踩坑（NSIS / ACL / 单实例 / semver 限制）
 - `desktop/README.md` 第 75–117 行 — 桌面端发布 + updater 双轨
 - `.claude/plans/dynamic-scribbling-hamming.md` — ~~思维导图连线交互方案~~ **文件已丢失，待重写**
+- `scripts/build_updater_json.py` — finalize job 重建 latest.json 的生成脚本（含资产→platform key 映射注释）
 - `~/.claude/projects/-Users-chenshu/memory/workbench-gotchas.md` — 维护性踩坑集合（已加入 #18 stdin EOF watchdog）

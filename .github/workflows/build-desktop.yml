@@ -159,3 +159,32 @@ jobs:
                 ;;
             esac
           done
+
+  # updater 清单（latest.json）权威重建 -------------------------------------------------
+  # 三平台并行矩阵里 tauri-action 的 includeUpdaterJson 会对同一个 latest.json 做
+  # 「下载现有 → 合并自己平台 → 上传覆盖」，read-modify-write 非原子 → 后写覆盖前写，
+  # 清单随机丢平台（曾致 preview 只剩 linux，Windows 预览端检查更新报
+  # "None of the fallback platforms [\"windows-x86_64-nsis\", \"windows-x86_64\"] were found"）。
+  # desktop 矩阵的 includeUpdaterJson 保留不动，让每平台按历史方式上传自己的 .sig 等
+  # updater 资产；它并发产生的 latest.json 只是 draft 期中间态（draft 不对外，无影响）。
+  # 本 job 等三平台全部成功后串行重建并 --clobber 覆盖，作为最终权威版本——转正式后
+  # 对外可见的清单必然完整。重建逻辑见 scripts/build_updater_json.py（本地比过
+  # tauri-action 产物，url/signature 逐项一致）。
+  finalize:
+    needs: desktop
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Rebuild + upload latest.json
+        shell: bash
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+          INPUT_TAG: ${{ github.ref_name }}
+        run: |
+          python3 scripts/build_updater_json.py > latest.json || exit 1
+          echo "rebuilt latest.json:"
+          python3 -c "import json; d=json.load(open('latest.json')); print(' version  =', d['version']); print(' platforms =', sorted(d['platforms']))"
+          gh release upload "$INPUT_TAG" latest.json --clobber
+          echo "latest.json uploaded to release $INPUT_TAG"
